@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { handle } from 'hono/vercel';
 
 import { corsMiddleware } from './middleware/cors.js';
 import { errorHandler } from './middleware/error.js';
@@ -35,3 +36,10 @@ export function createApp(): Hono<AppEnv> {
 }
 
 export const app = createApp();
+
+/**
+ * Vercel loads this module as the serverless entry and requires a default export
+ * that is a function or server; `handle(app)` is that fetch handler. The entry in
+ * api/index.ts is kept because the api-directory convention may be used instead.
+ */
+export default handle(app);
