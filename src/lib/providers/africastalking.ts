@@ -4,7 +4,33 @@ import { logger } from '../logger';
 import { maskPhone } from '../phone';
 import type { OtpProvider } from '../otp';
 
-type FetchLike = typeof fetch;
+/**
+ * Structural stand-ins for the fetch contract, declared locally on purpose.
+ *
+ * Naming the ambient `Response` type makes this file depend on how `@types/node`
+ * re-exports `undici-types`, which does not resolve identically in every build
+ * environment. Vercel's type check then fails with "Property 'text' does not
+ * exist on type 'Response'" even though a local `tsc --noEmit` passes. Declaring
+ * the three members actually used removes that coupling.
+ */
+export type HttpResponseLike = {
+  readonly ok: boolean;
+  readonly status: number;
+  text(): Promise<string>;
+};
+
+export type FetchInit = {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  signal: AbortSignal;
+};
+
+export type FetchLike = (url: string, init: FetchInit) => Promise<HttpResponseLike>;
+
+function getGlobalFetch(): FetchLike {
+  return (globalThis as unknown as { fetch: FetchLike }).fetch;
+}
 
 /** One entry from `SMSMessageData.Recipients`. */
 export type AtRecipient = {
@@ -87,7 +113,7 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
     this.senderId = options.senderId ?? env.AT_SENDER_ID ?? '';
     this.endpoint = options.endpoint ?? env.AT_SMS_ENDPOINT;
     this.timeoutMs = options.timeoutMs ?? env.AT_TIMEOUT_MS;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? getGlobalFetch();
   }
 
   async send(phone: string, code: string): Promise<void> {
@@ -103,7 +129,7 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    let response: Response;
+    let response: HttpResponseLike;
     try {
       response = await this.fetchImpl(this.endpoint, {
         method: 'POST',
