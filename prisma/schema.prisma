@@ -1,0 +1,90 @@
+// Taka resident server — Neon Postgres via Prisma.
+// Runtime uses the pooled DATABASE_URL; migrations use DIRECT_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Intent {
+  RESIDENT
+  REPORTER
+  COMMERCIAL
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id         String     @id @default(cuid())
+  phone      String     @unique
+  intent     Intent
+  status     UserStatus @default(ACTIVE)
+  firstName  String?
+  lastName   String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  resident   ResidentProfile?
+  reporter   ReporterProfile?
+  commercial CommercialProfile?
+}
+
+model ResidentProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wardKata          String
+  streetMtaa        String
+  lukuMeter         String   @unique
+  unitNumber        String?
+  latitude          Float
+  longitude         Float
+  profilePictureUrl String
+  createdAt         DateTime @default(now())
+}
+
+model ReporterProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profilePictureUrl String
+  createdAt         DateTime @default(now())
+}
+
+model CommercialProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName    String
+  wardKata        String
+  streetMtaa      String
+  latitude        Float
+  longitude       Float
+  // Provisional: the app currently only sends HIGH_VOLUME_DAILY. Stored as a
+  // string so the tier list can grow without a migration.
+  wasteTier       String
+  taxId           String   @unique
+  businessLogoUrl String
+  createdAt       DateTime @default(now())
+}
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}
