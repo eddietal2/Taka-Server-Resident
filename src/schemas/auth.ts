@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { phoneSchema } from './phone';
+import { phoneSchema } from './phone.js';
 
 /**
  * Mirrors taka-app-resident/src/api/schemas.ts so the client never sends a

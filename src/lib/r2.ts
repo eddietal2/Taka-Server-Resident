@@ -1,8 +1,8 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-import { env } from '../env';
-import { AppError } from './http';
+import { env } from '../env.js';
+import { AppError } from './http.js';
 
 let client: S3Client | null = null;
 

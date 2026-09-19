@@ -1,8 +1,8 @@
-import { env } from '../../env';
-import { AppError } from '../http';
-import { logger } from '../logger';
-import { maskPhone } from '../phone';
-import type { OtpProvider } from '../otp';
+import { env } from '../../env.js';
+import { AppError } from '../http.js';
+import { logger } from '../logger.js';
+import { maskPhone } from '../phone.js';
+import type { OtpProvider } from '../otp.js';
 
 /**
  * Structural stand-ins for the fetch contract, declared locally on purpose.

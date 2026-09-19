@@ -1,8 +1,8 @@
 import { createMiddleware } from 'hono/factory';
 
-import { AppError } from '../lib/http';
-import { verifyVerificationToken } from '../lib/jwt';
-import type { AppEnv } from '../types';
+import { AppError } from '../lib/http.js';
+import { verifyVerificationToken } from '../lib/jwt.js';
+import type { AppEnv } from '../types.js';
 
 function readBearerToken(header: string | undefined): string | null {
   if (!header) return null;

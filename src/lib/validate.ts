@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
-import { AppError } from './http';
+import { AppError } from './http.js';
 
 /**
  * Parses and validates a JSON request body. Throws the ZodError so the global

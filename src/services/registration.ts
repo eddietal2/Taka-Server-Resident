@@ -1,12 +1,12 @@
-import { env } from '../env';
-import { AppError } from '../lib/http';
-import { prisma } from '../lib/prisma';
+import { env } from '../env.js';
+import { AppError } from '../lib/http.js';
+import { prisma } from '../lib/prisma.js';
 import type {
   CommercialPayload,
   RegisterPayload,
   ReporterPayload,
   ResidentPayload,
-} from '../schemas/auth';
+} from '../schemas/auth.js';
 
 export type UserIntent = 'RESIDENT' | 'REPORTER' | 'COMMERCIAL';
 export type UserStatusValue = 'PENDING' | 'ACTIVE' | 'SUSPENDED';

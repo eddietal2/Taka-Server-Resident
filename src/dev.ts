@@ -5,8 +5,8 @@ config({ path: '.env.local' });
 config();
 
 const { serve } = await import('@hono/node-server');
-const { app } = await import('./index');
-const { env } = await import('./env');
+const { app } = await import('./index.js');
+const { env } = await import('./env.js');
 
 /**
  * Printed once at boot so a process running an older .env is obvious. `pnpm dev`

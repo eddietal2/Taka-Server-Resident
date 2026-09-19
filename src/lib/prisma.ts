@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-import { isProduction } from '../env';
+import { isProduction } from '../env.js';
 
 /**
  * Serverless-safe singleton. Vercel reuses module scope across warm

@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 
-import { env } from '../env';
+import { env } from '../env.js';
 
 const allowedOrigins = env.CORS_ORIGINS.split(',')
   .map((value) => value.trim())

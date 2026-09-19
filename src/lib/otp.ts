@@ -1,10 +1,10 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
-import { env } from '../env';
-import { AppError } from './http';
-import { logger } from './logger';
-import { maskPhone } from './phone';
-import { AfricasTalkingOtpProvider } from './providers/africastalking';
+import { env } from '../env.js';
+import { AppError } from './http.js';
+import { logger } from './logger.js';
+import { maskPhone } from './phone.js';
+import { AfricasTalkingOtpProvider } from './providers/africastalking.js';
 
 /**
  * Delivery adapter. Swap in a real SMS provider by implementing this interface

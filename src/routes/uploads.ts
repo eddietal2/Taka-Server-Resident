@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { Hono } from 'hono';
 
-import { ok } from '../lib/http';
-import { presignPutObject, publicUrlFor } from '../lib/r2';
-import { readValidatedJson } from '../lib/validate';
-import { requireVerificationToken } from '../middleware/auth';
-import { extensionForContentType, presignRequestSchema } from '../schemas/uploads';
-import type { AppEnv } from '../types';
+import { ok } from '../lib/http.js';
+import { presignPutObject, publicUrlFor } from '../lib/r2.js';
+import { readValidatedJson } from '../lib/validate.js';
+import { requireVerificationToken } from '../middleware/auth.js';
+import { extensionForContentType, presignRequestSchema } from '../schemas/uploads.js';
+import type { AppEnv } from '../types.js';
 
 export const uploadRoutes = new Hono<AppEnv>();
 

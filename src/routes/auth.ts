@@ -1,28 +1,28 @@
 import { Hono } from 'hono';
 
-import { env } from '../env';
-import { AppError, ok } from '../lib/http';
-import { signAccessToken, signVerificationToken } from '../lib/jwt';
-import { logger } from '../lib/logger';
+import { env } from '../env.js';
+import { AppError, ok } from '../lib/http.js';
+import { signAccessToken, signVerificationToken } from '../lib/jwt.js';
+import { logger } from '../lib/logger.js';
 import {
   generateOtpCode,
   getOtpProvider,
   hashOtpCode,
   isDevBypassCode,
   otpCodeMatches,
-} from '../lib/otp';
-import { prisma } from '../lib/prisma';
-import { readValidatedJson } from '../lib/validate';
-import { requireVerificationToken } from '../middleware/auth';
+} from '../lib/otp.js';
+import { prisma } from '../lib/prisma.js';
+import { readValidatedJson } from '../lib/validate.js';
+import { requireVerificationToken } from '../middleware/auth.js';
 import {
   commercialPayloadSchema,
   reporterPayloadSchema,
   residentPayloadSchema,
   type RegisterPayload,
-} from '../schemas/auth';
-import { otpRequestSchema, otpVerifySchema } from '../schemas/phone';
-import { createRegistration } from '../services/registration';
-import type { AppEnv } from '../types';
+} from '../schemas/auth.js';
+import { otpRequestSchema, otpVerifySchema } from '../schemas/phone.js';
+import { createRegistration } from '../services/registration.js';
+import type { AppEnv } from '../types.js';
 
 export const authRoutes = new Hono<AppEnv>();
 

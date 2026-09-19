@@ -1,8 +1,8 @@
 import type { Context } from 'hono';
 import { ZodError } from 'zod';
 
-import { AppError, fail } from '../lib/http';
-import { logger } from '../lib/logger';
+import { AppError, fail } from '../lib/http.js';
+import { logger } from '../lib/logger.js';
 
 type PrismaLikeError = {
   name?: string;
