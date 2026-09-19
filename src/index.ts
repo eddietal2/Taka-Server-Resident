@@ -1,5 +1,5 @@
+import { getRequestListener } from '@hono/node-server';
 import { Hono } from 'hono';
-import { handle } from 'hono/vercel';
 
 import { corsMiddleware } from './middleware/cors.js';
 import { errorHandler } from './middleware/error.js';
@@ -37,9 +37,35 @@ export function createApp(): Hono<AppEnv> {
 
 export const app = createApp();
 
+type NodeRequestListener = (request: unknown, response: unknown) => void;
+
+const nodeRequestListener = getRequestListener(app.fetch) as unknown as NodeRequestListener;
+
+/** A fetch Request exposes a Headers instance; a Node request exposes a plain object. */
+function isFetchRequest(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const headers = (value as { headers?: unknown }).headers;
+  if (typeof headers !== 'object' || headers === null) return false;
+  return typeof (headers as { get?: unknown }).get === 'function';
+}
+
 /**
- * Vercel loads this module as the serverless entry and requires a default export
- * that is a function or server; `handle(app)` is that fetch handler. The entry in
- * api/index.ts is kept because the api-directory convention may be used instead.
+ * Vercel loads this module as the serverless entry and invokes the default export.
+ *
+ * Its Node.js runtime calls the handler with Node's (req, res) pair, whereas Edge
+ * and Web-standard runtimes pass a fetch Request. `hono/vercel`'s handle assumed
+ * the latter, which produced "this.raw.headers.get is not a function" and left the
+ * response unended, so the request hung.
+ *
+ * This export covers both shapes: a fetch Request goes straight to app.fetch, and
+ * anything else is handed to @hono/node-server, which reads the Node request and
+ * writes the response. api/index.ts re-exports this for the api-directory convention.
  */
-export default handle(app);
+export default function vercelHandler(request: unknown, response?: unknown): unknown {
+  if (isFetchRequest(request)) {
+    return app.fetch(request as Request);
+  }
+
+  nodeRequestListener(request, response);
+  return undefined;
+}
