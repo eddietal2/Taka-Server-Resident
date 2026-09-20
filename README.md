@@ -17,6 +17,7 @@ All routes are served under `/api/v1`.
 | POST | `/auth/register-reporter` | Bearer verification token | `ReporterPayload` | `{ token?, status, user }` |
 | POST | `/auth/register-commercial` | Bearer verification token | `CommercialPayload` | `{ token?, status, user }` |
 | POST | `/uploads/presign` | Bearer verification token | `{ purpose, content_type }` | `{ uploadUrl, publicUrl, key }` |
+| POST | `/luku/lookup` | Bearer verification token | `{ luku_meter }` | `{ luku_meter, utility_code, status, active, owner_name, reason, checked_at }` |
 | GET | `/health` | — | — | `{ status, time }` |
 
 Errors always use `{ message, errors? }`, where `errors` is keyed by payload field name. This is
@@ -79,6 +80,50 @@ challenges are pruned on each request according to `OTP_RETENTION_SECONDS`.
 
 If the `R2_*` variables are empty, `presign` responds `503 File storage is not configured`.
 Everything else keeps working, so you can develop the sign-up flow except the photo step.
+
+### LUKU meter lookups
+
+`POST /luku/lookup` confirms a LUKU meter before a resident saves it to their profile:
+who the meter is registered to, and whether it is live. It is gated on the verification
+token, so the app calls it after `otp/verify` and before `register-resident`.
+
+It is a thin wrapper over nTZS's `POST /api/v1/lookup/merchant-name` with
+`{ kind: "bill", utilityCode: "LUKU", utilityRef: <meter> }` — see
+<https://www.ntzs.co.tz/developers#lookup>. Only the meter is sent: nTZS also accepts an
+optional `amountTzs`, because biller validation is amount-aware, but a registration-time
+owner check has no amount to offer, so that field belongs on the bill-payment quote
+instead. Both failure and success cases are described in `src/lib/providers/ntzs.ts`.
+
+The response reports one of three states, because nTZS never exposes a plain "active"
+flag and `name: null` is explicitly **not** an error — a slow or down utility and an
+unregistered meter look identical from outside:
+
+| `status` | `active` | `owner_name` | Meaning |
+| --- | --- | --- | --- |
+| `active` | `true` | set | The utility returned a registered owner: the meter is real and live. |
+| `rejected` | `false` | `null` | The utility answered and refused the reference (`reason` carries its result code). |
+| `unconfirmed` | `null` | `null` | No answer — utility slow, down, or `lookup_unavailable`. Never block the resident on this. |
+
+Anything unrecognised is reported as `unconfirmed`: a diagnostic we cannot interpret must
+never be rendered to a resident as "your meter is inactive". `reason` is the raw upstream
+string, kept for support tickets and not meant to be displayed.
+
+Notes for callers and deployment:
+
+- The enquiry is forwarded to the utility and can take **~25s**. Debounce — never call it
+  per keystroke — and show a spinner. `vercel.json` raises the function's `maxDuration` to
+  60s so the request is not killed mid-enquiry and returned as a 504.
+- nTZS rate limits lookups to 60/min per partner and audits every one, so the endpoint
+  must stay behind the verification token; a `429` is passed through when the limit is hit.
+- `ntzs_live_…` keys make real enquiries (audited, rate limited, nothing charged).
+  `ntzs_test_…` keys answer instantly with deterministic placeholder names, no upstream
+  call and no quota — use one locally, then swap in the live key for production. Environment
+  validation refuses to start with a test key while `NODE_ENV` is `production`.
+- The meter is checked locally first: a value that is not 11 digits is rejected with a
+  field-level `400` before any upstream call is made.
+- If `NTZS_API_KEY` is empty the route answers `503 Meter lookups are not configured on
+  this server.` Everything else keeps working, so the rest of the sign-up flow can be
+  developed without nTZS credentials.
 
 ## Scripts
 

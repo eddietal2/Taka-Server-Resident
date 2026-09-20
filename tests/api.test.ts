@@ -105,3 +105,35 @@ describe('register-resident', () => {
     });
   });
 });
+
+describe('luku/lookup', () => {
+  it('rejects without a verification token', async () => {
+    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '12345678901' });
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Verify your phone number to continue.',
+    });
+  });
+
+  it('rejects a malformed meter before spending an upstream lookup', async () => {
+    const token = await signVerificationToken(PHONE);
+    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '123' }, token);
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { message: string; errors?: Record<string, string> };
+    expect(body.message).toBe('Some details need fixing.');
+    expect(body.errors?.luku_meter).toBe('LUKU meters are 11 digits.');
+  });
+
+  it('answers 503 when the deployment has no nTZS key', async () => {
+    // tests/setup.ts deliberately leaves NTZS_API_KEY unset, so this asserts the
+    // route degrades instead of reaching out with empty credentials.
+    const token = await signVerificationToken(PHONE);
+    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '12345678901' }, token);
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Meter lookups are not configured on this server.',
+    });
+  });
+});

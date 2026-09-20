@@ -69,6 +69,16 @@ const envSchema = z.object({
   R2_PUBLIC_BASE_URL: urlString.optional(),
   R2_PRESIGN_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
+  // nTZS (https://www.ntzs.co.tz) — LUKU meter lookups. Optional: when the key is
+  // empty the lookup route answers 503 and every other feature keeps working.
+  // Keys are `ntzs_test_…` (sandbox: deterministic names, no upstream call, no
+  // quota) or `ntzs_live_…` (real utility enquiry, audited and rate limited).
+  NTZS_API_KEY: z.string().trim().optional(),
+  NTZS_BASE_URL: urlString.default('https://www.ntzs.co.tz'),
+  // A bill lookup is answered by the utility itself and can take ~25s upstream,
+  // so the default is generous. Keep the deployed function's maxDuration above it.
+  NTZS_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+
   CORS_ORIGINS: z.string().default(''),
 })
   .superRefine((value, ctx) => {
@@ -106,6 +116,18 @@ const envSchema = z.object({
         code: 'custom',
         path: ['AT_SMS_ENDPOINT'],
         message: 'AT_SMS_ENDPOINT must not use the sandbox host in production.',
+      });
+    }
+  })
+  .superRefine((value, ctx) => {
+    // A test key answers meter lookups with deterministic placeholder names
+    // instead of asking the utility, so shipping one to production would show
+    // residents a fabricated meter owner.
+    if (value.NODE_ENV === 'production' && value.NTZS_API_KEY?.startsWith('ntzs_test_')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['NTZS_API_KEY'],
+        message: 'NTZS_API_KEY must not be a test key in production.',
       });
     }
   });

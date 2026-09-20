@@ -5,6 +5,7 @@ import { corsMiddleware } from './middleware/cors.js';
 import { errorHandler } from './middleware/error.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { lukuRoutes } from './routes/luku.js';
 import { uploadRoutes } from './routes/uploads.js';
 import type { AppEnv } from './types.js';
 
@@ -29,6 +30,7 @@ export function createApp(): Hono<AppEnv> {
   api.route('/', healthRoutes);
   api.route('/', authRoutes);
   api.route('/', uploadRoutes);
+  api.route('/', lukuRoutes);
 
   app.route('/api/v1', api);
 
