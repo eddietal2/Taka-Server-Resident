@@ -19,6 +19,8 @@ export type PublicUser = {
   first_name?: string;
   last_name?: string;
   business_name?: string;
+  /** Profile picture for residents and reporters, logo for commercial accounts. */
+  picture_url?: string;
 };
 
 export type RegistrationOutcome = {
@@ -108,10 +110,12 @@ function toPublicUser(
   if (payload.intent === 'RESIDENT' || payload.intent === 'REPORTER') {
     publicUser.first_name = payload.first_name;
     publicUser.last_name = payload.last_name;
+    publicUser.picture_url = payload.profile_picture;
   }
 
   if (payload.intent === 'COMMERCIAL') {
     publicUser.business_name = payload.business_name;
+    publicUser.picture_url = payload.business_logo;
   }
 
   return publicUser;
@@ -128,7 +132,7 @@ export async function findSessionUser(
 ): Promise<{ user: PublicUser; status: UserStatusValue } | null> {
   const user = await prisma.user.findUnique({
     where: { phone },
-    include: { commercial: true },
+    include: { resident: true, reporter: true, commercial: true },
   });
 
   if (!user) return null;
@@ -142,9 +146,14 @@ export async function findSessionUser(
 
   if (user.intent === 'COMMERCIAL') {
     publicUser.business_name = user.commercial?.businessName ?? undefined;
+    publicUser.picture_url = user.commercial?.businessLogoUrl ?? undefined;
   } else {
     publicUser.first_name = user.firstName ?? undefined;
     publicUser.last_name = user.lastName ?? undefined;
+    publicUser.picture_url =
+      (user.intent === 'RESIDENT'
+        ? user.resident?.profilePictureUrl
+        : user.reporter?.profilePictureUrl) ?? undefined;
   }
 
   return { user: publicUser, status: user.status };
