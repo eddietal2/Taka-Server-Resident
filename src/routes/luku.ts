@@ -1,13 +1,41 @@
 import { Hono } from 'hono';
 
-import { ok } from '../lib/http.js';
+import { AppError, ok } from '../lib/http.js';
 import { getLukuLookupProvider } from '../lib/ntzs.js';
 import { readValidatedJson } from '../lib/validate.js';
 import { requireVerificationToken } from '../middleware/auth.js';
-import { LUKU_UTILITY_CODE, lukuLookupSchema } from '../schemas/luku.js';
+import { LUKU_UTILITY_CODE, lukuLocationSchema, lukuLookupSchema } from '../schemas/luku.js';
+import { attachLukuLocation, findLuku, recordLukuLookup } from '../services/luku.js';
 import type { AppEnv } from '../types.js';
 
 export const lukuRoutes = new Hono<AppEnv>();
+
+/**
+ * Guards that the number in the body is the one the token proves, mirroring the
+ * register handlers: a caller must not be able to run an enquiry for a number
+ * they have not just verified.
+ */
+function assertVerifiedPhone(verified: string, claimed: string): void {
+  if (claimed !== verified) {
+    throw new AppError('This number does not match the number you verified.', 403, {
+      phone: 'Does not match the verified number.',
+    });
+  }
+}
+
+/** The address already pinned to a meter, when one has been captured before. */
+function storedAddress(record: Awaited<ReturnType<typeof findLuku>>) {
+  const hasPoint = record?.latitude !== null && record?.longitude !== null;
+
+  return {
+    ward_kata: record?.wardKata ?? null,
+    street_mtaa: record?.streetMtaa ?? null,
+    location:
+      record && hasPoint
+        ? { latitude: record.latitude as number, longitude: record.longitude as number }
+        : null,
+  };
+}
 
 /**
  * Resolves a LUKU meter's registered owner and whether the meter is live, so the
@@ -21,11 +49,23 @@ export const lukuRoutes = new Hono<AppEnv>();
  *
  * Latency: the enquiry is forwarded to the utility and can take ~25s. The app
  * must debounce (never call this per keystroke) and show a spinner.
+ *
+ * A confirmed meter is written to the Luku table on the way out, so the location
+ * step and any later sign-up for the same meter start from what is already on
+ * file.
  */
 lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
-  const { luku_meter } = await readValidatedJson(c, lukuLookupSchema);
+  const { phone, luku_meter } = await readValidatedJson(c, lukuLookupSchema);
+  assertVerifiedPhone(c.get('verificationPhone'), phone);
 
   const outcome = await getLukuLookupProvider().lookupBill(LUKU_UTILITY_CODE, luku_meter);
+
+  // Only a confirmed owner creates a record. An unconfirmed enquiry is a normal
+  // upstream outcome, and persisting it would leave a row that later reads as a
+  // real meter.
+  const record = outcome.ownerName
+    ? await recordLukuLookup({ meterNumber: luku_meter, phone, ownerName: outcome.ownerName })
+    : await findLuku(luku_meter);
 
   return ok(c, {
     luku_meter,
@@ -38,9 +78,43 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
      * resident their working meter is dead every time the biller is slow.
      */
     active: outcome.status === 'active' ? true : outcome.status === 'rejected' ? false : null,
-    owner_name: outcome.ownerName,
+    owner_name: outcome.ownerName ?? record?.ownerName ?? null,
+    /** Address already on file for this meter, so the location step can reuse it. */
+    ...storedAddress(record),
     /** Upstream diagnostic, set only when `owner_name` is null. Not for display. */
     reason: outcome.reason,
     checked_at: new Date().toISOString(),
+  });
+});
+
+/**
+ * Pins the resident's GPS point to the LUKU reference number, which is what
+ * later collections are matched against. Called from the location step, which
+ * runs after the lookup, so the meter usually has a row already; the upsert
+ * covers the unconfirmed case where the lookup never created one.
+ */
+lukuRoutes.post('/luku/location', requireVerificationToken, async (c) => {
+  const payload = await readValidatedJson(c, lukuLocationSchema);
+  assertVerifiedPhone(c.get('verificationPhone'), payload.phone);
+
+  const record = await attachLukuLocation({
+    meterNumber: payload.luku_meter,
+    phone: payload.phone,
+    latitude: payload.location.latitude,
+    longitude: payload.location.longitude,
+    wardKata: payload.ward_kata,
+    streetMtaa: payload.street_mtaa,
+  });
+
+  return ok(c, {
+    luku_meter: record.meterNumber,
+    owner_name: record.ownerName,
+    ward_kata: record.wardKata,
+    street_mtaa: record.streetMtaa,
+    location:
+      record.latitude !== null && record.longitude !== null
+        ? { latitude: record.latitude, longitude: record.longitude }
+        : null,
+    updated_at: record.updatedAt.toISOString(),
   });
 });

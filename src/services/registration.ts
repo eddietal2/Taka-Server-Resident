@@ -86,6 +86,9 @@ function createCommercial(payload: CommercialPayload, status: UserStatusValue) {
           streetMtaa: payload.street_mtaa,
           latitude: payload.location.latitude,
           longitude: payload.location.longitude,
+          lukuMeter: payload.luku_meter
+            ? trimmedOrNull(payload.luku_meter)
+            : null,
           wasteTier: payload.waste_tier,
           taxId: payload.tax_id,
           businessLogoUrl: payload.business_logo,

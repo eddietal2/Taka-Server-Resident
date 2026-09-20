@@ -74,7 +74,33 @@ model CommercialProfile {
   wasteTier       String
   taxId           String   @unique
   businessLogoUrl String
+  // Optional: a business may register without a meter, but when it has one we
+  // keep the reference so collections can be matched to the premises.
+  lukuMeter       String?
   createdAt       DateTime @default(now())
+}
+
+/// A confirmed LUKU meter, created the first time a resident looks one up.
+///
+/// The meter reference number is the durable key (`meterNumber`): the sign-up
+/// flow resolves the owner once, then pins GPS coordinates to the same record
+/// on the location step so a later sign-up for the same meter starts from the
+/// address already on file. `phone` records who first claimed it; the profile
+/// tables own the authoritative user link once registration completes.
+model Luku {
+  id          String   @id @default(cuid())
+  meterNumber String   @unique
+  phone       String?
+  /// Registered owner as returned by the utility; null when unconfirmed.
+  ownerName   String?
+  wardKata    String?
+  streetMtaa  String?
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([phone])
 }
 
 model OtpChallenge {

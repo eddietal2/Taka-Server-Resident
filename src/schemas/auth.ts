@@ -58,6 +58,11 @@ export const commercialPayloadSchema = z.object({
   ward_kata: localitySchema,
   street_mtaa: localitySchema,
   location: geoPointSchema,
+  /**
+   * A business may share or lack a meter, so this is optional — but when the
+   * sign-up lookup confirmed one, the reference is kept on the profile.
+   */
+  luku_meter: z.string().regex(LUKU_METER_PATTERN, 'LUKU meters are 11 digits.').optional(),
   waste_tier: z.enum(WASTE_TIERS),
   tax_id: z.string().regex(TAX_ID_PATTERN, 'Use the 123-456-789 format.'),
   business_logo: imageUrlSchema,

@@ -108,7 +108,10 @@ describe('register-resident', () => {
 
 describe('luku/lookup', () => {
   it('rejects without a verification token', async () => {
-    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '12345678901' });
+    const res = await postJson('/api/v1/luku/lookup', {
+      phone: PHONE,
+      luku_meter: '12345678901',
+    });
     expect(res.status).toBe(401);
     await expect(res.json()).resolves.toMatchObject({
       message: 'Verify your phone number to continue.',
@@ -117,7 +120,11 @@ describe('luku/lookup', () => {
 
   it('rejects a malformed meter before spending an upstream lookup', async () => {
     const token = await signVerificationToken(PHONE);
-    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '123' }, token);
+    const res = await postJson(
+      '/api/v1/luku/lookup',
+      { phone: PHONE, luku_meter: '123' },
+      token
+    );
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { message: string; errors?: Record<string, string> };
@@ -125,11 +132,29 @@ describe('luku/lookup', () => {
     expect(body.errors?.luku_meter).toBe('LUKU meters are 11 digits.');
   });
 
+  it('rejects a phone that does not match the verified number', async () => {
+    const token = await signVerificationToken(PHONE);
+    const res = await postJson(
+      '/api/v1/luku/lookup',
+      { phone: '+255700000000', luku_meter: '12345678901' },
+      token
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'This number does not match the number you verified.',
+    });
+  });
+
   it('answers 503 when the deployment has no nTZS key', async () => {
     // tests/setup.ts deliberately leaves NTZS_API_KEY unset, so this asserts the
     // route degrades instead of reaching out with empty credentials.
     const token = await signVerificationToken(PHONE);
-    const res = await postJson('/api/v1/luku/lookup', { luku_meter: '12345678901' }, token);
+    const res = await postJson(
+      '/api/v1/luku/lookup',
+      { phone: PHONE, luku_meter: '12345678901' },
+      token
+    );
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toMatchObject({
