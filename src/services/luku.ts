@@ -34,36 +34,61 @@ export function recordLukuLookup(input: {
 
 /**
  * Pins GPS coordinates to a meter, creating the row when the lookup came back
- * unconfirmed and so never persisted one. Address parts are written only when
- * supplied, so a capture without a geocode cannot blank a value we already had.
+ * unconfirmed and so never persisted one.
+ *
+ * Deliberately coordinates-only. The ward and street are written by
+ * `syncLukuAddress` at registration, because the reverse geocoder's "street" is
+ * often the ward's name echoed back, and the location step runs before the
+ * resident has typed anything.
  */
 export function attachLukuLocation(input: {
   meterNumber: string;
   phone: string;
   latitude: number;
   longitude: number;
-  wardKata?: string;
-  streetMtaa?: string;
 }) {
-  const address = {
-    ...(input.wardKata ? { wardKata: input.wardKata } : {}),
-    ...(input.streetMtaa ? { streetMtaa: input.streetMtaa } : {}),
-  };
-
   return prisma.luku.upsert({
     where: { meterNumber: input.meterNumber },
     update: {
       phone: input.phone,
       latitude: input.latitude,
       longitude: input.longitude,
-      ...address,
     },
     create: {
       meterNumber: input.meterNumber,
       phone: input.phone,
       latitude: input.latitude,
       longitude: input.longitude,
-      ...address,
+    },
+  });
+}
+
+/**
+ * Writes the address the resident typed onto the meter.
+ *
+ * Called at registration — the first point at which the ward and street exist as
+ * words a human chose, rather than as whatever the geocoder guessed. The values
+ * are written as submitted: an empty street clears the column, so the record
+ * always reflects the claim that was just made for the meter.
+ */
+export function syncLukuAddress(input: {
+  meterNumber: string;
+  phone: string;
+  wardKata: string;
+  streetMtaa: string | null;
+}) {
+  return prisma.luku.upsert({
+    where: { meterNumber: input.meterNumber },
+    update: {
+      phone: input.phone,
+      wardKata: input.wardKata,
+      streetMtaa: input.streetMtaa,
+    },
+    create: {
+      meterNumber: input.meterNumber,
+      phone: input.phone,
+      wardKata: input.wardKata,
+      streetMtaa: input.streetMtaa,
     },
   });
 }

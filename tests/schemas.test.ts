@@ -74,6 +74,12 @@ describe('residentPayloadSchema', () => {
       true
     );
   });
+
+  it('accepts an empty street now that it is optional', () => {
+    expect(residentPayloadSchema.safeParse({ ...residentPayload, street_mtaa: '' }).success).toBe(
+      true
+    );
+  });
 });
 
 describe('reporter and commercial schemas', () => {
@@ -86,6 +92,12 @@ describe('reporter and commercial schemas', () => {
         last_name: 'Ali',
         profile_picture: 'https://cdn.example.com/a.jpg',
       }).success
+    ).toBe(true);
+  });
+
+  it('accepts an empty street for commercial', () => {
+    expect(
+      commercialPayloadSchema.safeParse({ ...commercialPayload, street_mtaa: '' }).success
     ).toBe(true);
   });
 

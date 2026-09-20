@@ -19,9 +19,12 @@ export const lukuLookupSchema = z.object({
 });
 
 /**
- * Pins a GPS point to a LUKU reference number. The address parts are optional
- * because reverse geocoding is best-effort — on web, or offline, only the
- * coordinates are known.
+ * Pins a GPS point to a LUKU reference number.
+ *
+ * Coordinates only: the ward and street are attached when the account is
+ * registered, from the words the resident actually typed. A reverse-geocoded
+ * street is frequently the ward's name repeated, which is exactly the value that
+ * must not end up on the meter record.
  */
 export const lukuLocationSchema = z.object({
   phone: phoneSchema,
@@ -30,8 +33,6 @@ export const lukuLocationSchema = z.object({
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  ward_kata: z.string().trim().max(80).optional(),
-  street_mtaa: z.string().trim().max(80).optional(),
 });
 
 export type LukuLookupPayload = z.infer<typeof lukuLookupSchema>;

@@ -1,5 +1,6 @@
 import { env } from '../env.js';
 import { AppError } from '../lib/http.js';
+import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import type {
   CommercialPayload,
@@ -7,6 +8,7 @@ import type {
   ReporterPayload,
   ResidentPayload,
 } from '../schemas/auth.js';
+import { syncLukuAddress } from './luku.js';
 
 export type UserIntent = 'RESIDENT' | 'REPORTER' | 'COMMERCIAL';
 export type UserStatusValue = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
@@ -163,6 +165,32 @@ export async function findSessionUser(
 }
 
 /**
+ * Copies the typed ward and street onto the meter record.
+ *
+ * Best-effort: the account exists by this point, and a meter that cannot be
+ * annotated must not turn a successful registration into an error.
+ */
+async function syncMeterAddress(
+  meterNumber: string,
+  phone: string,
+  wardKata: string,
+  streetMtaa: string
+): Promise<void> {
+  try {
+    await syncLukuAddress({
+      meterNumber,
+      phone,
+      wardKata,
+      streetMtaa: trimmedOrNull(streetMtaa),
+    });
+  } catch (error) {
+    logger.warn('luku.address_sync_failed', {
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
+  }
+}
+
+/**
  * Creates the User and its intent-specific profile. Uniqueness violations
  * (phone, luku_meter, tax_id) surface as Prisma P2002 and are mapped to a 409
  * by the error middleware.
@@ -179,6 +207,12 @@ export async function createRegistration(payload: RegisterPayload): Promise<Regi
 
   if (payload.intent === 'RESIDENT') {
     const user = await createResident(payload, status);
+    await syncMeterAddress(
+      payload.luku_meter,
+      payload.phone,
+      payload.ward_kata,
+      payload.street_mtaa
+    );
     return { user: toPublicUser(user, payload, status), status };
   }
 
@@ -188,5 +222,14 @@ export async function createRegistration(payload: RegisterPayload): Promise<Regi
   }
 
   const user = await createCommercial(payload, status);
+  // A business may register without a meter; only annotate one it actually has.
+  if (payload.luku_meter) {
+    await syncMeterAddress(
+      payload.luku_meter,
+      payload.phone,
+      payload.ward_kata,
+      payload.street_mtaa
+    );
+  }
   return { user: toPublicUser(user, payload, status), status };
 }

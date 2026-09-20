@@ -92,6 +92,8 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
  * later collections are matched against. Called from the location step, which
  * runs after the lookup, so the meter usually has a row already; the upsert
  * covers the unconfirmed case where the lookup never created one.
+ *
+ * Coordinates only — the typed ward and street are attached at registration.
  */
 lukuRoutes.post('/luku/location', requireVerificationToken, async (c) => {
   const payload = await readValidatedJson(c, lukuLocationSchema);
@@ -102,8 +104,6 @@ lukuRoutes.post('/luku/location', requireVerificationToken, async (c) => {
     phone: payload.phone,
     latitude: payload.location.latitude,
     longitude: payload.location.longitude,
-    wardKata: payload.ward_kata,
-    streetMtaa: payload.street_mtaa,
   });
 
   return ok(c, {
