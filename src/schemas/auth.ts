@@ -10,8 +10,15 @@ import { phoneSchema } from './phone.js';
 export const LUKU_METER_PATTERN = /^\d{11}$/;
 export const TAX_ID_PATTERN = /^\d{3}-\d{3}-\d{3}$/;
 
-/** Provisional: the app currently only offers HIGH_VOLUME_DAILY. */
-export const WASTE_TIERS = ['HIGH_VOLUME_DAILY'] as const;
+/**
+ * Must match WASTE_TIERS in taka-app-resident/src/constants/registration.ts —
+ * a tier the app offers but this list omits is rejected by `register-commercial`.
+ */
+export const WASTE_TIERS = [
+  'LOW_VOLUME_WEEKLY',
+  'MEDIUM_VOLUME_TWICE_WEEKLY',
+  'HIGH_VOLUME_DAILY',
+] as const;
 export type WasteTier = (typeof WASTE_TIERS)[number];
 
 const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
