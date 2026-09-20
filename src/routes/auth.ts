@@ -21,7 +21,7 @@ import {
   type RegisterPayload,
 } from '../schemas/auth.js';
 import { otpRequestSchema, otpVerifySchema } from '../schemas/phone.js';
-import { createRegistration } from '../services/registration.js';
+import { createRegistration, findSessionUser } from '../services/registration.js';
 import type { AppEnv } from '../types.js';
 
 export const authRoutes = new Hono<AppEnv>();
@@ -163,6 +163,31 @@ authRoutes.post('/auth/otp/verify', async (c) => {
     verification_token: verificationToken,
     expires_in: env.VERIFICATION_TOKEN_TTL_SECONDS,
   });
+});
+
+/**
+ * Exchanges a verified phone number for an access token, so someone who already
+ * has an account can sign in. Registration is the only other source of a token.
+ *
+ * The account is found from the token's phone rather than the request body, so
+ * a caller cannot ask for a session on a number they have not just verified.
+ */
+authRoutes.post('/auth/login', requireVerificationToken, async (c) => {
+  const account = await findSessionUser(c.get('verificationPhone'));
+
+  if (!account) {
+    throw new AppError('No account found for this number. Sign up instead.', 404, {
+      phone: 'No account found for this number.',
+    });
+  }
+
+  // Verified, but not yet approved: no session until an admin activates it.
+  if (account.status !== 'ACTIVE') {
+    return ok(c, { status: account.status, user: account.user });
+  }
+
+  const token = await signAccessToken(account.user.id);
+  return ok(c, { token, status: account.status, user: account.user });
 });
 
 async function completeRegistration(verifiedPhone: string, payload: RegisterPayload) {

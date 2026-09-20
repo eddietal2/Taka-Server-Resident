@@ -118,6 +118,39 @@ function toPublicUser(
 }
 
 /**
+ * Looks up an existing account by phone, for logging in.
+ *
+ * Unlike `toPublicUser`, which describes the payload the caller just sent, the
+ * profile details here come from the database.
+ */
+export async function findSessionUser(
+  phone: string
+): Promise<{ user: PublicUser; status: UserStatusValue } | null> {
+  const user = await prisma.user.findUnique({
+    where: { phone },
+    include: { commercial: true },
+  });
+
+  if (!user) return null;
+
+  const publicUser: PublicUser = {
+    id: user.id,
+    phone: user.phone,
+    intent: user.intent,
+    status: user.status,
+  };
+
+  if (user.intent === 'COMMERCIAL') {
+    publicUser.business_name = user.commercial?.businessName ?? undefined;
+  } else {
+    publicUser.first_name = user.firstName ?? undefined;
+    publicUser.last_name = user.lastName ?? undefined;
+  }
+
+  return { user: publicUser, status: user.status };
+}
+
+/**
  * Creates the User and its intent-specific profile. Uniqueness violations
  * (phone, luku_meter, tax_id) surface as Prisma P2002 and are mapped to a 409
  * by the error middleware.
