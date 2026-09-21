@@ -21,7 +21,9 @@ export const WASTE_TIERS = [
 ] as const;
 export type WasteTier = (typeof WASTE_TIERS)[number];
 
-const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
+/** Exported so editing a name later is held to the same rules as registering one. */
+export const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
+export const businessNameSchema = z.string().trim().min(2, 'Required.').max(120, 'Too long.');
 const localitySchema = z.string().trim().min(2, 'Required.').max(80, 'Too long.');
 /**
  * Street / mtaa. Optional for now: not everyone knows theirs, and the details
@@ -59,7 +61,7 @@ export const reporterPayloadSchema = z.object({
 export const commercialPayloadSchema = z.object({
   phone: phoneSchema,
   intent: z.literal('COMMERCIAL'),
-  business_name: z.string().trim().min(2, 'Required.').max(120, 'Too long.'),
+  business_name: businessNameSchema,
   ward_kata: localitySchema,
   street_mtaa: streetSchema,
   location: geoPointSchema,

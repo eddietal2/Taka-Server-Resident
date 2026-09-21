@@ -179,6 +179,24 @@ describe('users/me', () => {
     const errorBody = (await res.json()) as { errors?: Record<string, string> };
     expect(errorBody.errors?.theme_preference).toBeTruthy();
   });
+
+  it('holds a name to the same minimum as registration', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { first_name: 'A' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.first_name).toBeTruthy();
+  });
+
+  it('holds a business name to the same minimum as registration', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { business_name: 'A' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.business_name).toBeTruthy();
+  });
 });
 
 describe('register-resident', () => {

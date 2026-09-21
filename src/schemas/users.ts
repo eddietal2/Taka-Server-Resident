@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { businessNameSchema, nameSchema } from './auth.js';
+
 /** Languages the app ships translations for. */
 export const USER_LANGUAGES = ['en', 'sw'] as const;
 export type UserLanguage = (typeof USER_LANGUAGES)[number];
@@ -34,6 +36,15 @@ export function isThemePreference(value: string | null | undefined): value is Th
  * would later hand to an image loader. The length cap keeps the column bounded.
  */
 export const updateUserSchema = z.object({
+  /**
+   * A personal name for a resident or reporter, and `business_name` for a
+   * commercial account. Reaching for the registration schemas keeps the two in
+   * step: a name the sign-up form would have accepted is never refused here.
+   * Which pair applies is decided from the stored intent, not from the body.
+   */
+  first_name: nameSchema.optional(),
+  last_name: nameSchema.optional(),
+  business_name: businessNameSchema.optional(),
   picture_url: z
     .string()
     .trim()
