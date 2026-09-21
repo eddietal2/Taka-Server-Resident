@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { app } from '../src/index';
-import { signVerificationToken } from '../src/lib/jwt';
+import { signAccessToken, signVerificationToken } from '../src/lib/jwt';
 
 const PHONE = '+255712345678';
 
@@ -28,6 +28,20 @@ async function postJson(path: string, body: unknown, token?: string) {
     body: JSON.stringify(body),
   });
 }
+
+async function patchJson(path: string, body: unknown, token?: string) {
+  return app.request(path, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Any well-formed access-token subject; nothing here reads the account. */
+const USER_ID = 'clx000000000000000000001';
 
 describe('service routes', () => {
   it('answers the root probe', async () => {
@@ -80,6 +94,62 @@ describe('verification gating', () => {
     await expect(res.json()).resolves.toMatchObject({
       message: 'Your verification has expired. Request a new code.',
     });
+  });
+});
+
+describe('presign authorisation', () => {
+  it('rejects a token that is neither a verification nor an access token', async () => {
+    const res = await postJson(
+      '/api/v1/uploads/presign',
+      { purpose: 'profile_picture' },
+      'garbage'
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('accepts an access token, so a signed-in account can replace its picture', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await postJson('/api/v1/uploads/presign', { purpose: 'profile_picture' }, token);
+
+    // tests/setup.ts deliberately leaves R2_* unset, so a 503 here is the proof
+    // that the token was accepted and the request reached storage configuration
+    // rather than bouncing off authentication. Before the fix this was a 401.
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'File storage is not configured (missing R2_BUCKET).',
+    });
+  });
+});
+
+describe('users/me', () => {
+  const body = { picture_url: 'https://cdn.example.com/a.jpg' };
+
+  it('rejects without a token', async () => {
+    const res = await patchJson('/api/v1/users/me', body);
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects a verification token, which is not a session', async () => {
+    const token = await signVerificationToken(PHONE);
+    const res = await patchJson('/api/v1/users/me', body, token);
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Your session has expired. Sign in again.',
+    });
+  });
+
+  it('rejects a picture_url that is not an absolute http url', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { picture_url: 'not-a-url' }, token);
+
+    // The body is validated before the account is read, so this asserts the
+    // schema without needing a database.
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.picture_url).toBeTruthy();
   });
 });
 

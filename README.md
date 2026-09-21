@@ -16,7 +16,8 @@ All routes are served under `/api/v1`.
 | POST | `/auth/register-resident` | Bearer verification token | `ResidentPayload` | `{ token?, status, user }` |
 | POST | `/auth/register-reporter` | Bearer verification token | `ReporterPayload` | `{ token?, status, user }` |
 | POST | `/auth/register-commercial` | Bearer verification token | `CommercialPayload` | `{ token?, status, user }` |
-| POST | `/uploads/presign` | Bearer verification token | `{ purpose, content_type }` | `{ uploadUrl, publicUrl, key }` |
+| POST | `/uploads/presign` | Bearer verification **or** access token | `{ purpose, content_type }` | `{ uploadUrl, publicUrl, key }` |
+| PATCH | `/users/me` | Bearer access token | `{ picture_url }` | `{ status, user }` |
 | POST | `/luku/lookup` | Bearer verification token | `{ luku_meter }` | `{ luku_meter, utility_code, status, active, owner_name, reason, checked_at }` |
 | GET | `/health` | — | — | `{ status, time }` |
 
