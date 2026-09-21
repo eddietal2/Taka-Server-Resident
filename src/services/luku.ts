@@ -57,6 +57,31 @@ export async function isMeterRegistered(meterNumber: string): Promise<boolean> {
 }
 
 /**
+ * What the database already knows about a meter, as the app needs it:
+ *
+ * - `claimed` — a live account holds the meter, so it cannot be registered again.
+ * - `mapped` — the meter is on file with an address but no account claims it. The
+ *   leftover row when someone re-pointed their profile at a new meter or deleted
+ *   their account; the address is still worth reusing.
+ * - `new` — neither: a meter the database has never seen.
+ */
+export type MeterState = 'new' | 'claimed' | 'mapped';
+
+/**
+ * Classifies a meter. Pure so the decision can be tested without a database.
+ *
+ * A claim outranks a saved address: once an account holds the meter the address
+ * it also carries is moot, because the sign-up will be refused either way.
+ */
+export function classifyMeter(input: {
+  claimedByAccount: boolean;
+  hasSavedAddress: boolean;
+}): MeterState {
+  if (input.claimedByAccount) return 'claimed';
+  return input.hasSavedAddress ? 'mapped' : 'new';
+}
+
+/**
  * Pins GPS coordinates to a meter, creating the row when the lookup came back
  * unconfirmed and so never persisted one.
  *

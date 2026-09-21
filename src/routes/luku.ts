@@ -7,6 +7,7 @@ import { requireVerificationToken } from '../middleware/auth.js';
 import { LUKU_UTILITY_CODE, lukuLocationSchema, lukuLookupSchema } from '../schemas/luku.js';
 import {
   attachLukuLocation,
+  classifyMeter,
   findLuku,
   isMeterRegistered,
   recordLukuLookup,
@@ -28,17 +29,19 @@ function assertVerifiedPhone(verified: string, claimed: string): void {
   }
 }
 
-/** The address already pinned to a meter, when one has been captured before. */
-function storedAddress(record: Awaited<ReturnType<typeof findLuku>>) {
-  const hasPoint = record?.latitude !== null && record?.longitude !== null;
+/**
+ * The address already pinned to a meter, or null when none has been captured.
+ *
+ * Non-null is what makes a meter `mapped` rather than `new`, so it doubles as
+ * the signal the location step explains — and as the data it seeds the map with.
+ */
+function savedAddress(record: Awaited<ReturnType<typeof findLuku>>) {
+  if (!record || record.latitude === null || record.longitude === null) return null;
 
   return {
-    ward_kata: record?.wardKata ?? null,
-    street_mtaa: record?.streetMtaa ?? null,
-    location:
-      record && hasPoint
-        ? { latitude: record.latitude as number, longitude: record.longitude as number }
-        : null,
+    location: { latitude: record.latitude, longitude: record.longitude },
+    ward_kata: record.wardKata,
+    street_mtaa: record.streetMtaa,
   };
 }
 
@@ -72,9 +75,10 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
     ? await recordLukuLookup({ meterNumber: luku_meter, phone, ownerName: outcome.ownerName })
     : await findLuku(luku_meter);
 
-  // Asked after the enquiry, so a deployment without nTZS credentials still
+  // Both asked after the enquiry, so a deployment without nTZS credentials still
   // fails on the enquiry rather than on a database read.
-  const alreadyRegistered = await isMeterRegistered(luku_meter);
+  const address = savedAddress(record);
+  const claimedByAccount = await isMeterRegistered(luku_meter);
 
   return ok(c, {
     luku_meter,
@@ -89,12 +93,13 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
     active: outcome.status === 'active' ? true : outcome.status === 'rejected' ? false : null,
     owner_name: outcome.ownerName ?? record?.ownerName ?? null,
     /**
-     * True when this meter already belongs to a Taka account. The app warns on
-     * the location step, because registration will refuse the duplicate meter.
+     * What the database already knew about this meter. `claimed` stops the app on
+     * the meter step, before the user fills in steps that would be discarded;
+     * `mapped` is what the location step explains.
      */
-    already_registered: alreadyRegistered,
-    /** Address already on file for this meter, so the location step can reuse it. */
-    ...storedAddress(record),
+    state: classifyMeter({ claimedByAccount, hasSavedAddress: address !== null }),
+    /** Address on file, so the app can seed the map and pre-fill the ward. */
+    saved_address: address,
     /** Upstream diagnostic, set only when `owner_name` is null. Not for display. */
     reason: outcome.reason,
     checked_at: new Date().toISOString(),
