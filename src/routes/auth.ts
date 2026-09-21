@@ -103,9 +103,18 @@ authRoutes.post('/auth/otp/request', async (c) => {
     throw new AppError('We could not send the verification code. Please try again.', 503);
   }
 
+  // Reported, never enforced: this endpoint also serves sign-in, where an
+  // existing account is the expected case. Sign-up uses the flag to stop before
+  // collecting details for a registration that would be refused at the end.
+  const existingAccount = await prisma.user.findUnique({
+    where: { phone },
+    select: { id: true },
+  });
+
   return ok(c, {
     expires_in: env.OTP_TTL_SECONDS,
     resend_after: env.OTP_RESEND_SECONDS,
+    registered: existingAccount !== null,
     // Dev/Preview convenience: the app ignores unknown fields; the log has it too.
     ...(env.OTP_DEV_MODE ? { dev_code: code } : {}),
   });
