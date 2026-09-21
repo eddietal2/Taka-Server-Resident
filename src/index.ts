@@ -7,6 +7,7 @@ import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { lukuRoutes } from './routes/luku.js';
 import { uploadRoutes } from './routes/uploads.js';
+import { usersRoutes } from './routes/users.js';
 import type { AppEnv } from './types.js';
 
 export function createApp(): Hono<AppEnv> {
@@ -31,6 +32,7 @@ export function createApp(): Hono<AppEnv> {
   api.route('/', authRoutes);
   api.route('/', uploadRoutes);
   api.route('/', lukuRoutes);
+  api.route('/', usersRoutes);
 
   app.route('/api/v1', api);
 

@@ -126,22 +126,28 @@ function toPublicUser(
   return publicUser;
 }
 
+/** A user row with every intent-specific profile loaded. */
+type ProfileUser = {
+  id: string;
+  phone: string;
+  intent: UserIntent;
+  status: UserStatusValue;
+  firstName: string | null;
+  lastName: string | null;
+  resident: { profilePictureUrl: string } | null;
+  reporter: { profilePictureUrl: string } | null;
+  commercial: { businessName: string; businessLogoUrl: string } | null;
+};
+
 /**
- * Looks up an existing account by phone, for logging in.
+ * Shapes a stored account for the client.
  *
- * Unlike `toPublicUser`, which describes the payload the caller just sent, the
- * profile details here come from the database.
+ * Unlike `toPublicUser`, which describes the payload the caller just sent, these
+ * details come from the database. Residents and reporters keep their picture on
+ * their own profile table, while a business stores a logo — all three surface as
+ * `picture_url`, so the app has one field to render whatever the account type.
  */
-export async function findSessionUser(
-  phone: string
-): Promise<{ user: PublicUser; status: UserStatusValue } | null> {
-  const user = await prisma.user.findUnique({
-    where: { phone },
-    include: { resident: true, reporter: true, commercial: true },
-  });
-
-  if (!user) return null;
-
+function toPublicUserFromProfile(user: ProfileUser): PublicUser {
   const publicUser: PublicUser = {
     id: user.id,
     phone: user.phone,
@@ -161,7 +167,35 @@ export async function findSessionUser(
         : user.reporter?.profilePictureUrl) ?? undefined;
   }
 
-  return { user: publicUser, status: user.status };
+  return publicUser;
+}
+
+/** Looks up an existing account by phone, for logging in. */
+export async function findSessionUser(
+  phone: string
+): Promise<{ user: PublicUser; status: UserStatusValue } | null> {
+  const user = await prisma.user.findUnique({
+    where: { phone },
+    include: { resident: true, reporter: true, commercial: true },
+  });
+
+  if (!user) return null;
+
+  return { user: toPublicUserFromProfile(user), status: user.status };
+}
+
+/** The same shape, looked up by id, for a caller holding an access token. */
+export async function findUserById(
+  userId: string
+): Promise<{ user: PublicUser; status: UserStatusValue } | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { resident: true, reporter: true, commercial: true },
+  });
+
+  if (!user) return null;
+
+  return { user: toPublicUserFromProfile(user), status: user.status };
 }
 
 /**
