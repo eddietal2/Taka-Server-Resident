@@ -75,8 +75,11 @@ model CommercialProfile {
   taxId           String   @unique
   businessLogoUrl String
   // Optional: a business may register without a meter, but when it has one we
-  // keep the reference so collections can be matched to the premises.
-  lukuMeter       String?
+  // keep the reference so collections can be matched to the premises. Unique so
+  // the database, not just the meter step, refuses a second account on one
+  // meter; Postgres treats NULLs as distinct, so meterless businesses are
+  // unaffected.
+  lukuMeter       String?  @unique
   createdAt       DateTime @default(now())
 }
 

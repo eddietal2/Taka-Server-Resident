@@ -8,7 +8,7 @@ import type {
   ReporterPayload,
   ResidentPayload,
 } from '../schemas/auth.js';
-import { syncLukuAddress } from './luku.js';
+import { findMeterClaim, syncLukuAddress } from './luku.js';
 
 export type UserIntent = 'RESIDENT' | 'REPORTER' | 'COMMERCIAL';
 export type UserStatusValue = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
@@ -203,6 +203,24 @@ export async function createRegistration(payload: RegisterPayload): Promise<Regi
     throw new AppError('This number is already registered. Try logging in instead.', 409, {
       phone: 'This number is already registered.',
     });
+  }
+
+  // A meter may be held by one account only. Each profile table is unique on its
+  // own `lukuMeter`, so the databases catch a duplicate within a table; the
+  // cross-table case — a business claiming a household's meter, or the reverse —
+  // is only visible here. The app already blocks this on the meter step, so this
+  // is the backstop for a caller that skips that step.
+  const meter = payload.intent === 'REPORTER' ? null : payload.luku_meter ?? null;
+  if (meter) {
+    const holder = await findMeterClaim(meter);
+    // A claim by this same number cannot reach here — that phone would already
+    // exist as a User and be rejected above — but comparing keeps the more
+    // accurate error if that guard ever moves.
+    if (holder && holder !== payload.phone) {
+      throw new AppError('This meter is already registered to another account.', 409, {
+        luku_meter: 'Already registered to another account.',
+      });
+    }
   }
 
   if (payload.intent === 'RESIDENT') {

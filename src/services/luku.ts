@@ -33,27 +33,29 @@ export function recordLukuLookup(input: {
 }
 
 /**
- * Whether the meter is already bound to a Taka account.
+ * The phone of the account already holding the meter, or null when no account
+ * does.
  *
- * Both profile tables are checked: `lukuMeter` is unique on each, but a meter
- * can legitimately belong to a household or a business, and the caller only
- * needs to know that *some* account holds it. Deliberately asked of the profiles
- * rather than the `Luku` row — a row created moments ago by the lookup in this
- * very flow is not an existing registration.
+ * Both profile tables are checked because a meter can legitimately belong to a
+ * household or a business, and the unique constraints live per table — so only
+ * an application check can see the cross-table case. Deliberately asked of the
+ * profiles rather than the `Luku` row: a row created moments ago by the lookup
+ * in this very flow is not an existing registration, and deleting that row does
+ * not free the meter.
  */
-export async function isMeterRegistered(meterNumber: string): Promise<boolean> {
+export async function findMeterClaim(meterNumber: string): Promise<string | null> {
   const [resident, commercial] = await Promise.all([
     prisma.residentProfile.findUnique({
       where: { lukuMeter: meterNumber },
-      select: { id: true },
+      select: { user: { select: { phone: true } } },
     }),
     prisma.commercialProfile.findFirst({
       where: { lukuMeter: meterNumber },
-      select: { id: true },
+      select: { user: { select: { phone: true } } },
     }),
   ]);
 
-  return Boolean(resident ?? commercial);
+  return resident?.user.phone ?? commercial?.user.phone ?? null;
 }
 
 /**

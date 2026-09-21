@@ -9,7 +9,7 @@ import {
   attachLukuLocation,
   classifyMeter,
   findLuku,
-  isMeterRegistered,
+  findMeterClaim,
   recordLukuLookup,
 } from '../services/luku.js';
 import type { AppEnv } from '../types.js';
@@ -78,7 +78,7 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
   // Both asked after the enquiry, so a deployment without nTZS credentials still
   // fails on the enquiry rather than on a database read.
   const address = savedAddress(record);
-  const claimedByAccount = await isMeterRegistered(luku_meter);
+  const claimedByAccount = (await findMeterClaim(luku_meter)) !== null;
 
   return ok(c, {
     luku_meter,
