@@ -5,7 +5,12 @@ import { getLukuLookupProvider } from '../lib/ntzs.js';
 import { readValidatedJson } from '../lib/validate.js';
 import { requireVerificationToken } from '../middleware/auth.js';
 import { LUKU_UTILITY_CODE, lukuLocationSchema, lukuLookupSchema } from '../schemas/luku.js';
-import { attachLukuLocation, findLuku, recordLukuLookup } from '../services/luku.js';
+import {
+  attachLukuLocation,
+  findLuku,
+  isMeterRegistered,
+  recordLukuLookup,
+} from '../services/luku.js';
 import type { AppEnv } from '../types.js';
 
 export const lukuRoutes = new Hono<AppEnv>();
@@ -67,6 +72,10 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
     ? await recordLukuLookup({ meterNumber: luku_meter, phone, ownerName: outcome.ownerName })
     : await findLuku(luku_meter);
 
+  // Asked after the enquiry, so a deployment without nTZS credentials still
+  // fails on the enquiry rather than on a database read.
+  const alreadyRegistered = await isMeterRegistered(luku_meter);
+
   return ok(c, {
     luku_meter,
     utility_code: LUKU_UTILITY_CODE,
@@ -79,6 +88,11 @@ lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
      */
     active: outcome.status === 'active' ? true : outcome.status === 'rejected' ? false : null,
     owner_name: outcome.ownerName ?? record?.ownerName ?? null,
+    /**
+     * True when this meter already belongs to a Taka account. The app warns on
+     * the location step, because registration will refuse the duplicate meter.
+     */
+    already_registered: alreadyRegistered,
     /** Address already on file for this meter, so the location step can reuse it. */
     ...storedAddress(record),
     /** Upstream diagnostic, set only when `owner_name` is null. Not for display. */

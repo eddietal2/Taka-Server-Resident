@@ -33,6 +33,30 @@ export function recordLukuLookup(input: {
 }
 
 /**
+ * Whether the meter is already bound to a Taka account.
+ *
+ * Both profile tables are checked: `lukuMeter` is unique on each, but a meter
+ * can legitimately belong to a household or a business, and the caller only
+ * needs to know that *some* account holds it. Deliberately asked of the profiles
+ * rather than the `Luku` row — a row created moments ago by the lookup in this
+ * very flow is not an existing registration.
+ */
+export async function isMeterRegistered(meterNumber: string): Promise<boolean> {
+  const [resident, commercial] = await Promise.all([
+    prisma.residentProfile.findUnique({
+      where: { lukuMeter: meterNumber },
+      select: { id: true },
+    }),
+    prisma.commercialProfile.findFirst({
+      where: { lukuMeter: meterNumber },
+      select: { id: true },
+    }),
+  ]);
+
+  return Boolean(resident ?? commercial);
+}
+
+/**
  * Pins GPS coordinates to a meter, creating the row when the lookup came back
  * unconfirmed and so never persisted one.
  *
