@@ -8,6 +8,12 @@ import type {
   ReporterPayload,
   ResidentPayload,
 } from '../schemas/auth.js';
+import {
+  isThemePreference,
+  isUserLanguage,
+  type ThemePreference,
+  type UserLanguage,
+} from '../schemas/users.js';
 import { findMeterClaim, syncLukuAddress } from './luku.js';
 
 export type UserIntent = 'RESIDENT' | 'REPORTER' | 'COMMERCIAL';
@@ -23,6 +29,10 @@ export type PublicUser = {
   business_name?: string;
   /** Profile picture for residents and reporters, logo for commercial accounts. */
   picture_url?: string;
+  /** Chosen app language. Absent until the account picks one. */
+  language?: UserLanguage;
+  /** Chosen appearance. Absent until the account picks one. */
+  theme_preference?: ThemePreference;
 };
 
 export type RegistrationOutcome = {
@@ -134,6 +144,8 @@ type ProfileUser = {
   status: UserStatusValue;
   firstName: string | null;
   lastName: string | null;
+  language: string | null;
+  themePreference: string | null;
   resident: { profilePictureUrl: string } | null;
   reporter: { profilePictureUrl: string } | null;
   commercial: { businessName: string; businessLogoUrl: string } | null;
@@ -165,6 +177,15 @@ function toPublicUserFromProfile(user: ProfileUser): PublicUser {
       (user.intent === 'RESIDENT'
         ? user.resident?.profilePictureUrl
         : user.reporter?.profilePictureUrl) ?? undefined;
+  }
+
+  // Narrowed rather than cast: a value written outside the API would otherwise
+  // reach the app's translator as an unknown key set and paint blank labels.
+  if (isUserLanguage(user.language)) {
+    publicUser.language = user.language;
+  }
+  if (isThemePreference(user.themePreference)) {
+    publicUser.theme_preference = user.themePreference;
   }
 
   return publicUser;

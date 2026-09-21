@@ -151,6 +151,34 @@ describe('users/me', () => {
     const errorBody = (await res.json()) as { errors?: Record<string, string> };
     expect(errorBody.errors?.picture_url).toBeTruthy();
   });
+
+  it('rejects an empty update, which would report success and change nothing', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', {}, token);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Send at least one field to update.',
+    });
+  });
+
+  it('rejects a language the app does not ship', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { language: 'fr' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.language).toBeTruthy();
+  });
+
+  it('rejects an appearance outside light and dark', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { theme_preference: 'sepia' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.theme_preference).toBeTruthy();
+  });
 });
 
 describe('register-resident', () => {

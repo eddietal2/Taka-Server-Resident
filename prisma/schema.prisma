@@ -24,14 +24,19 @@ enum UserStatus {
 }
 
 model User {
-  id         String     @id @default(cuid())
-  phone      String     @unique
-  intent     Intent
-  status     UserStatus @default(ACTIVE)
-  firstName  String?
-  lastName   String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  phone           String     @unique
+  intent          Intent
+  status          UserStatus @default(ACTIVE)
+  firstName       String?
+  lastName        String?
+  /// Chosen app language ("en" or "sw"). Null until the account picks one, in
+  /// which case the device's own choice is adopted at the next sign-in.
+  language        String?
+  /// Chosen appearance ("light" or "dark"). Null until the account picks one.
+  themePreference String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   resident   ResidentProfile?
   reporter   ReporterProfile?
