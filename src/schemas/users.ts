@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { businessNameSchema, nameSchema } from './auth.js';
+import { phoneSchema } from './phone.js';
 
 /** Languages the app ships translations for. */
 export const USER_LANGUAGES = ['en', 'sw'] as const;
@@ -56,3 +57,18 @@ export const updateUserSchema = z.object({
 });
 
 export type UpdateUserPayload = z.infer<typeof updateUserSchema>;
+
+/**
+ * The body of `POST /users/me/phone`.
+ *
+ * A new number is only stored once it has been proved reachable, so the caller
+ * sends the short-lived `verification_token` that `otp/verify` issued for it.
+ * The destination phone rides along so the route can check the two agree — the
+ * server reads the number from the token, never from `phone` alone.
+ */
+export const changePhoneSchema = z.object({
+  phone: phoneSchema,
+  verification_token: z.string().trim().min(1, 'Required.'),
+});
+
+export type ChangePhonePayload = z.infer<typeof changePhoneSchema>;

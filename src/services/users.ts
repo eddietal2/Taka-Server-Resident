@@ -97,3 +97,34 @@ export async function updateUser(
 
   return updated;
 }
+
+/**
+ * Moves an account onto a different phone number.
+ *
+ * The number is taken to be already verified by the route; this only refuses a
+ * number another account already holds, then stores it. Uniqueness is checked
+ * here rather than left to the column's constraint so the caller gets a field
+ * error naming the phone, matching how registration reports a taken number.
+ */
+export async function changePhone(userId: string, phone: string): Promise<UserUpdateOutcome> {
+  const account = await findUserById(userId);
+  if (!account) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  const existing = await prisma.user.findUnique({ where: { phone }, select: { id: true } });
+  if (existing && existing.id !== userId) {
+    throw new AppError('This number is already registered to another account.', 409, {
+      phone: 'This number is already registered.',
+    });
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { phone } });
+
+  const updated = await findUserById(userId);
+  if (!updated) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  return updated;
+}

@@ -199,6 +199,63 @@ describe('users/me', () => {
   });
 });
 
+describe('users/me/phone', () => {
+  const NEW_PHONE = '+255700000000';
+
+  it('rejects without an access token', async () => {
+    const res = await postJson('/api/v1/users/me/phone', {
+      phone: NEW_PHONE,
+      verification_token: 'x',
+    });
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects a malformed new number before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/phone',
+      { phone: '0712345678', verification_token: 'x' },
+      accessToken
+    );
+
+    // The body is validated before the account is read, so this asserts the
+    // schema without needing a database.
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.phone).toBeTruthy();
+  });
+
+  it('rejects a verification token that proves a different number', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const verificationToken = await signVerificationToken(PHONE);
+    const res = await postJson(
+      '/api/v1/users/me/phone',
+      { phone: NEW_PHONE, verification_token: verificationToken },
+      accessToken
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'This number does not match the number you verified.',
+    });
+  });
+
+  it('rejects a verification token that is not one', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/phone',
+      { phone: NEW_PHONE, verification_token: 'garbage' },
+      accessToken
+    );
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Verify your new number to continue.',
+    });
+  });
+});
+
 describe('register-resident', () => {
   it('returns field errors for an invalid payload', async () => {
     const token = await signVerificationToken(PHONE);
