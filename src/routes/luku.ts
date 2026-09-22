@@ -78,7 +78,12 @@ lukuRoutes.post('/luku/lookup', requirePhoneOwner, async (c) => {
   // Both asked after the enquiry, so a deployment without nTZS credentials still
   // fails on the enquiry rather than on a database read.
   const address = savedAddress(record);
-  const claimedByAccount = (await findMeterClaim(luku_meter)) !== null;
+  // A meter this very account holds is not claimed by someone else — it is
+  // already theirs. Without this, a signed-in account re-checking its own meter
+  // would be told the meter is in use and could never keep it. During sign-up no
+  // account exists yet, so this only ever excludes the caller's own meter.
+  const claimHolder = await findMeterClaim(luku_meter);
+  const claimedByAccount = claimHolder !== null && claimHolder !== phone;
 
   return ok(c, {
     luku_meter,
