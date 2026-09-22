@@ -44,6 +44,13 @@ const envSchema = z.object({
   OTP_MESSAGE_TEMPLATE: z
     .string()
     .default('Taka: {{code}} is your verification code. It expires in {{minutes}} minutes.'),
+  // Sent to the account's number once the account has been deleted. Kept short,
+  // and it deliberately says what survived so the text matches the app's copy.
+  ACCOUNT_DELETED_MESSAGE: z
+    .string()
+    .default(
+      'Taka: Your account has been deleted. Your LUKU meter number and its address stay on file so the meter can be registered again.'
+    ),
 
   // Delivery adapter. "africastalking" sends real SMS; "log" writes the code to
   // the server log and is intended for tests and offline work only.

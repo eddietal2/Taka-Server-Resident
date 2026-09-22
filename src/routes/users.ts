@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 
+import { env } from '../env.js';
 import { AppError, ok } from '../lib/http.js';
 import { verifyVerificationToken } from '../lib/jwt.js';
+import { sendAccountMessage } from '../lib/otp.js';
 import { readValidatedJson } from '../lib/validate.js';
 import { requireAccessToken } from '../middleware/auth.js';
 import { changePhoneSchema, updateSiteSchema, updateUserSchema } from '../schemas/users.js';
 import { findUserById } from '../services/registration.js';
-import { changePhone, updateSite, updateUser } from '../services/users.js';
+import { changePhone, deleteAccount, updateSite, updateUser } from '../services/users.js';
 import type { AppEnv } from '../types.js';
 
 export const usersRoutes = new Hono<AppEnv>();
@@ -93,4 +95,23 @@ usersRoutes.post('/users/me/site', requireAccessToken, async (c) => {
   const account = await updateSite(c.get('authenticatedUserId'), payload);
 
   return ok(c, { status: account.status, user: account.user });
+});
+
+/**
+ * Deletes the signed-in account.
+ *
+ * Everything the profile owns goes with it. The LUKU meter number is released
+ * rather than removed: it stays on file with its address so the meter can be
+ * registered again, by this person with a new account or by whoever moves in
+ * next. The account's phone is cleared from the meter row so nothing links the
+ * deleted account back to it.
+ */
+usersRoutes.delete('/users/me', requireAccessToken, async (c) => {
+  const { phone } = await deleteAccount(c.get('authenticatedUserId'));
+
+  // Best-effort, and after the account is already gone: a message that cannot be
+  // delivered must not report the deletion as having failed.
+  await sendAccountMessage(phone, env.ACCOUNT_DELETED_MESSAGE);
+
+  return ok(c, { deleted: true });
 });

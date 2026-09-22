@@ -63,6 +63,17 @@ describe('AfricasTalkingOtpProvider', () => {
     expect(params.get('message')).toContain('123456');
   });
 
+  it('sends a plain notice with no code in it', async () => {
+    const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(acceptedResponse());
+
+    await providerWith(fetchImpl).sendMessage(PHONE, 'Your account has been deleted.');
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, FetchInit];
+    const params = new URLSearchParams(init.body);
+    expect(params.get('to')).toBe('+255712345678');
+    expect(params.get('message')).toBe('Your account has been deleted.');
+  });
+
   it('includes from only when a sender ID is configured', async () => {
     const withSender = vi.fn<FetchLike>().mockResolvedValue(acceptedResponse());
     await providerWith(withSender, 'TAKA').send(PHONE, '123456');

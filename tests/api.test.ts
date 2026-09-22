@@ -199,6 +199,27 @@ describe('users/me', () => {
   });
 });
 
+describe('users/me deletion', () => {
+  it('rejects without an access token', async () => {
+    const res = await app.request('/api/v1/users/me', { method: 'DELETE' });
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects a verification token, which is not a session', async () => {
+    const token = await signVerificationToken(PHONE);
+    const res = await app.request('/api/v1/users/me', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      message: 'Your session has expired. Sign in again.',
+    });
+  });
+});
+
 describe('users/me/site', () => {
   const site = {
     ward_kata: 'Ihumwa',

@@ -119,10 +119,43 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
   async send(phone: string, code: string): Promise<void> {
     const minutes = Math.max(1, Math.round(env.OTP_TTL_SECONDS / 60));
 
+    await this.dispatch({
+      phone,
+      message: renderMessage(code, minutes),
+      event: 'otp',
+      failure: 'We could not send the verification code. Please try again.',
+    });
+  }
+
+  /** A plain transactional notice, e.g. the confirmation of an account deletion. */
+  async sendMessage(phone: string, message: string): Promise<void> {
+    await this.dispatch({
+      phone,
+      message,
+      event: 'sms',
+      failure: 'We could not send the message. Please try again.',
+    });
+  }
+
+  /**
+   * The one place a message is handed to Africa's Talking.
+   *
+   * A code and a notice differ only in their text and in how a failure is
+   * described, so the transport, the per-recipient checks and the timeout live
+   * here once. `event` prefixes the log events so the two are distinguishable.
+   */
+  private async dispatch(input: {
+    phone: string;
+    message: string;
+    event: string;
+    failure: string;
+  }): Promise<void> {
+    const { phone, message, event, failure } = input;
+
     const body = new URLSearchParams({
       username: this.username,
       to: phone,
-      message: renderMessage(code, minutes),
+      message,
     });
     if (this.senderId) body.set('from', this.senderId);
 
@@ -142,12 +175,12 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
         signal: controller.signal,
       });
     } catch (error) {
-      logger.error('otp.dispatch_failed', {
+      logger.error(`${event}.dispatch_failed`, {
         provider: this.name,
         phone: maskPhone(phone),
         reason: error instanceof Error ? error.name : 'unknown',
       });
-      throw new AppError('We could not send the verification code. Please try again.', 503);
+      throw new AppError(failure, 503);
     } finally {
       clearTimeout(timer);
     }
@@ -158,7 +191,7 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
     if (!response.ok) {
       // Meta keys must not be named `message`: that would overwrite the logger's
       // event name field and blank it out.
-      logger.error('otp.dispatch_rejected', {
+      logger.error(`${event}.dispatch_rejected`, {
         provider: this.name,
         phone: maskPhone(phone),
         status: response.status,
@@ -169,7 +202,7 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
         errorMessage: payload.errorMessage,
         body: raw.slice(0, 500),
       });
-      throw new AppError('We could not send the verification code. Please try again.', 503);
+      throw new AppError(failure, 503);
     }
 
     const recipients = payload.SMSMessageData?.Recipients ?? [];
@@ -180,7 +213,7 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
     );
 
     if (recipients.length === 0 || failed.length > 0) {
-      logger.error('otp.dispatch_rejected', {
+      logger.error(`${event}.dispatch_rejected`, {
         provider: this.name,
         phone: maskPhone(phone),
         status: response.status,
@@ -189,11 +222,11 @@ export class AfricasTalkingOtpProvider implements OtpProvider {
         recipientStatus: recipients.map((recipient) => recipient.status),
         body: raw.slice(0, 500),
       });
-      throw new AppError('We could not send the verification code. Please try again.', 503);
+      throw new AppError(failure, 503);
     }
 
-    // The message id is enough to trace delivery; the code itself is never logged.
-    logger.info('otp.dispatch', {
+    // The message id is enough to trace delivery; the text itself is never logged.
+    logger.info(`${event}.dispatch`, {
       provider: this.name,
       phone: maskPhone(phone),
       messageId: recipients[0]?.messageId,

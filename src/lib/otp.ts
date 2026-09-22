@@ -12,7 +12,14 @@ import { AfricasTalkingOtpProvider } from './providers/africastalking.js';
  */
 export interface OtpProvider {
   readonly name: string;
+  /** Sends a one-time code. */
   send(phone: string, code: string): Promise<void>;
+  /**
+   * Sends a plain transactional notice with no code in it, such as the
+   * confirmation that an account was deleted. Kept on the same adapter so a
+   * deployment has exactly one place to configure SMS delivery.
+   */
+  sendMessage(phone: string, message: string): Promise<void>;
 }
 
 /**
@@ -32,6 +39,11 @@ class LogOtpProvider implements OtpProvider {
       ...(env.OTP_DEV_MODE ? { code } : {}),
     });
   }
+
+  /** Nothing is delivered; the notice is logged so a dev can see it happened. */
+  async sendMessage(phone: string, _message: string): Promise<void> {
+    logger.info('sms.dispatch', { provider: this.name, phone: maskPhone(phone) });
+  }
 }
 
 let cachedProvider: OtpProvider | null = null;
@@ -41,6 +53,24 @@ export function getOtpProvider(): OtpProvider {
   if (cachedProvider) return cachedProvider;
   cachedProvider = createOtpProvider();
   return cachedProvider;
+}
+
+/**
+ * Sends a transactional notice, best-effort.
+ *
+ * A notice only ever follows something that has already succeeded — an account
+ * that is already deleted — so a delivery failure must not turn that into an
+ * error for the caller. The reason is logged instead.
+ */
+export async function sendAccountMessage(phone: string, message: string): Promise<void> {
+  try {
+    await getOtpProvider().sendMessage(phone, message);
+  } catch (error) {
+    logger.warn('sms.notice_failed', {
+      phone: maskPhone(phone),
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
+  }
 }
 
 /**

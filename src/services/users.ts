@@ -229,3 +229,45 @@ export async function updateSite(
 
   return updated;
 }
+
+/**
+ * Deletes the account, and with it everything that belongs only to it.
+ *
+ * The profile rows — and so the picture, the name and the saved address — go
+ * with the user, because their foreign keys cascade. The meter record is
+ * deliberately kept: it is keyed by its reference number rather than by the
+ * account, and it holds the address that was pinned to that meter. With no
+ * profile left holding it, it reads as `mapped`, exactly as it does when an
+ * account moves off a meter, which is what lets the meter be registered again.
+ *
+ * The account's phone is cleared from that meter row so a deleted account leaves
+ * no link behind. Best-effort in the same transaction as the delete, so the two
+ * cannot disagree.
+ *
+ * The phone is returned so the caller can tell the person their account is gone;
+ * it has to be read before the row that holds it is deleted.
+ */
+export async function deleteAccount(userId: string): Promise<{ phone: string }> {
+  const account = await findUserById(userId);
+  if (!account) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  const meter = account.user.luku_meter;
+  const phone = account.user.phone;
+
+  if (!meter) {
+    await prisma.user.delete({ where: { id: userId } });
+    return { phone };
+  }
+
+  await prisma.$transaction([
+    prisma.luku.updateMany({
+      where: { meterNumber: meter, phone },
+      data: { phone: null },
+    }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+
+  return { phone };
+}
