@@ -33,6 +33,14 @@ export type PublicUser = {
   language?: UserLanguage;
   /** Chosen appearance. Absent until the account picks one. */
   theme_preference?: ThemePreference;
+  /** Service address, absent for reporters, who have none. */
+  ward_kata?: string;
+  street_mtaa?: string;
+  location?: { latitude: number; longitude: number };
+  /** LUKU meter on file, absent for an account without one. */
+  luku_meter?: string;
+  /** Registered owner of that meter, when the utility confirmed one. */
+  luku_owner_name?: string;
 };
 
 export type RegistrationOutcome = {
@@ -133,8 +141,26 @@ function toPublicUser(
     publicUser.picture_url = payload.business_logo;
   }
 
+  // The address the sign-up form collected, so the account the client caches is
+  // complete without a second read. Reporters have no address or meter.
+  if (payload.intent !== 'REPORTER') {
+    publicUser.ward_kata = payload.ward_kata;
+    publicUser.street_mtaa = payload.street_mtaa;
+    publicUser.location = payload.location;
+    if (payload.luku_meter) publicUser.luku_meter = payload.luku_meter;
+  }
+
   return publicUser;
 }
+
+/** The address columns a resident or commercial profile carries. */
+type AddressProfile = {
+  wardKata: string;
+  streetMtaa: string | null;
+  lukuMeter: string | null;
+  latitude: number;
+  longitude: number;
+};
 
 /** A user row with every intent-specific profile loaded. */
 type ProfileUser = {
@@ -146,9 +172,9 @@ type ProfileUser = {
   lastName: string | null;
   language: string | null;
   themePreference: string | null;
-  resident: { profilePictureUrl: string } | null;
+  resident: (AddressProfile & { profilePictureUrl: string }) | null;
   reporter: { profilePictureUrl: string } | null;
-  commercial: { businessName: string; businessLogoUrl: string } | null;
+  commercial: (AddressProfile & { businessName: string; businessLogoUrl: string }) | null;
 };
 
 /**
@@ -179,6 +205,16 @@ function toPublicUserFromProfile(user: ProfileUser): PublicUser {
         : user.reporter?.profilePictureUrl) ?? undefined;
   }
 
+  // A resident or commercial account carries the service address; a reporter
+  // pins nothing and holds no meter, so both stay absent.
+  const address = user.intent === 'COMMERCIAL' ? user.commercial : user.resident;
+  if (address) {
+    publicUser.ward_kata = address.wardKata;
+    publicUser.street_mtaa = address.streetMtaa ?? undefined;
+    publicUser.location = { latitude: address.latitude, longitude: address.longitude };
+    if (address.lukuMeter) publicUser.luku_meter = address.lukuMeter;
+  }
+
   // Narrowed rather than cast: a value written outside the API would otherwise
   // reach the app's translator as an unknown key set and paint blank labels.
   if (isUserLanguage(user.language)) {
@@ -188,6 +224,25 @@ function toPublicUserFromProfile(user: ProfileUser): PublicUser {
     publicUser.theme_preference = user.themePreference;
   }
 
+  return publicUser;
+}
+
+/**
+ * Adds the registered owner of the account's meter, when one is on file.
+ *
+ * The owner lives on the meter record rather than on the profile, and it is only
+ * informational, so it is looked up after the profile is shaped rather than
+ * joined into the account query.
+ */
+async function attachLukuOwner(publicUser: PublicUser): Promise<PublicUser> {
+  if (!publicUser.luku_meter) return publicUser;
+
+  const meter = await prisma.luku.findUnique({
+    where: { meterNumber: publicUser.luku_meter },
+    select: { ownerName: true },
+  });
+
+  if (meter?.ownerName) publicUser.luku_owner_name = meter.ownerName;
   return publicUser;
 }
 
@@ -202,7 +257,7 @@ export async function findSessionUser(
 
   if (!user) return null;
 
-  return { user: toPublicUserFromProfile(user), status: user.status };
+  return { user: await attachLukuOwner(toPublicUserFromProfile(user)), status: user.status };
 }
 
 /** The same shape, looked up by id, for a caller holding an access token. */
@@ -216,7 +271,17 @@ export async function findUserById(
 
   if (!user) return null;
 
-  return { user: toPublicUserFromProfile(user), status: user.status };
+  return { user: await attachLukuOwner(toPublicUserFromProfile(user)), status: user.status };
+}
+
+/**
+ * The phone number on an account, for middleware that holds only an access
+ * token. Deliberately a projection rather than `findUserById`: gating a meter
+ * enquiry should not load three profile tables.
+ */
+export async function findUserPhoneById(userId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true } });
+  return user?.phone ?? null;
 }
 
 /**

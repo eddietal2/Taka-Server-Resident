@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { businessNameSchema, nameSchema } from './auth.js';
+import { businessNameSchema, geoPointSchema, LUKU_METER_PATTERN, localitySchema, nameSchema } from './auth.js';
 import { phoneSchema } from './phone.js';
 
 /** Languages the app ships translations for. */
@@ -72,3 +72,26 @@ export const changePhoneSchema = z.object({
 });
 
 export type ChangePhonePayload = z.infer<typeof changePhoneSchema>;
+
+/**
+ * The body of `POST /users/me/site`.
+ *
+ * The address words and the pin are required because the profile columns are
+ * non-null. The meter is optional because a commercial account may have none:
+ * omitting it keeps the current meter, while an empty string detaches one. The
+ * server writes this address onto the meter record too, so the profile and the
+ * meter never disagree about where collections should go.
+ */
+export const updateSiteSchema = z.object({
+  ward_kata: localitySchema,
+  street_mtaa: z.string().trim().max(80, 'Too long.'),
+  location: geoPointSchema,
+  luku_meter: z
+    .union([
+      z.string().trim().regex(LUKU_METER_PATTERN, 'LUKU meters are 11 digits.'),
+      z.literal(''),
+    ])
+    .optional(),
+});
+
+export type UpdateSitePayload = z.infer<typeof updateSiteSchema>;

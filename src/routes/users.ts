@@ -4,8 +4,9 @@ import { AppError, ok } from '../lib/http.js';
 import { verifyVerificationToken } from '../lib/jwt.js';
 import { readValidatedJson } from '../lib/validate.js';
 import { requireAccessToken } from '../middleware/auth.js';
-import { changePhoneSchema, updateUserSchema } from '../schemas/users.js';
-import { changePhone, updateUser } from '../services/users.js';
+import { changePhoneSchema, updateSiteSchema, updateUserSchema } from '../schemas/users.js';
+import { findUserById } from '../services/registration.js';
+import { changePhone, updateSite, updateUser } from '../services/users.js';
 import type { AppEnv } from '../types.js';
 
 export const usersRoutes = new Hono<AppEnv>();
@@ -18,6 +19,22 @@ export const usersRoutes = new Hono<AppEnv>();
  * server actually holds rather than echoing back what it sent — which is what
  * keeps a preference set on one device from disagreeing with the next.
  */
+/**
+ * Reads the signed-in account.
+ *
+ * The app stores the account it signed in with, but its address and meter are
+ * edited from another screen and can change underneath it, so a screen that
+ * needs them asks for the server's copy rather than trusting the cache.
+ */
+usersRoutes.get('/users/me', requireAccessToken, async (c) => {
+  const account = await findUserById(c.get('authenticatedUserId'));
+  if (!account) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  return ok(c, { status: account.status, user: account.user });
+});
+
 usersRoutes.patch('/users/me', requireAccessToken, async (c) => {
   const payload = await readValidatedJson(c, updateUserSchema);
 
@@ -58,6 +75,22 @@ usersRoutes.post('/users/me/phone', requireAccessToken, async (c) => {
   }
 
   const account = await changePhone(c.get('authenticatedUserId'), phone);
+
+  return ok(c, { status: account.status, user: account.user });
+});
+
+/**
+ * Updates the account's service address: its pin, its ward and street, and the
+ * meter it is billed through.
+ *
+ * All of it arrives together because the three are one answer to "where do we
+ * collect from"; the service below makes the profile and the meter record agree
+ * rather than letting one drift from the other.
+ */
+usersRoutes.post('/users/me/site', requireAccessToken, async (c) => {
+  const payload = await readValidatedJson(c, updateSiteSchema);
+
+  const account = await updateSite(c.get('authenticatedUserId'), payload);
 
   return ok(c, { status: account.status, user: account.user });
 });

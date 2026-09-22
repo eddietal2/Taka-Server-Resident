@@ -1,6 +1,7 @@
 import { AppError } from '../lib/http.js';
 import { prisma } from '../lib/prisma.js';
-import type { UpdateUserPayload } from '../schemas/users.js';
+import type { UpdateSitePayload, UpdateUserPayload } from '../schemas/users.js';
+import { attachLukuLocation, findMeterClaim, syncLukuAddress } from './luku.js';
 import { findUserById, type PublicUser, type UserStatusValue } from './registration.js';
 
 export type UserUpdateOutcome = {
@@ -120,6 +121,106 @@ export async function changePhone(userId: string, phone: string): Promise<UserUp
   }
 
   await prisma.user.update({ where: { id: userId }, data: { phone } });
+
+  const updated = await findUserById(userId);
+  if (!updated) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  return updated;
+}
+
+/**
+ * Updates the account's service address: its pin, its ward and street, and the
+ * meter it is billed through.
+ *
+ * The profile and the meter record are made to agree in one call, because a
+ * meter carries its own address and the two must not drift: the address on the
+ * meter is what a later sign-up for it is seeded with. The old meter, when the
+ * account moves off one, is deliberately left behind as a `mapped` row.
+ */
+export async function updateSite(
+  userId: string,
+  payload: UpdateSitePayload
+): Promise<UserUpdateOutcome> {
+  const account = await findUserById(userId);
+  if (!account) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  const { intent, phone } = account.user;
+  if (intent === 'REPORTER') {
+    throw new AppError('This account has no service address.', 400);
+  }
+  const isCommercial = intent === 'COMMERCIAL';
+
+  // Omitted means "keep the current meter"; an empty string is a commercial
+  // account detaching its meter.
+  const currentMeter = account.user.luku_meter ?? null;
+  const requestedMeter =
+    payload.luku_meter === undefined ? currentMeter : payload.luku_meter || null;
+
+  if (!isCommercial && !requestedMeter) {
+    // A resident household is always billed through a meter, so an empty one is
+    // refused rather than silently stored.
+    throw new AppError('A resident account needs a meter.', 400, {
+      luku_meter: 'Enter the meter number.',
+    });
+  }
+
+  // A meter already on another account cannot be moved here. Asked of the
+  // profiles rather than the Luku row, so a meter merely on file still passes.
+  if (requestedMeter && requestedMeter !== currentMeter) {
+    const holder = await findMeterClaim(requestedMeter);
+    if (holder && holder !== phone) {
+      throw new AppError('This meter is already registered to another account.', 409, {
+        luku_meter: 'Already registered to another account.',
+      });
+    }
+  }
+
+  // Mirror the address onto the meter so a future sign-up for it starts from a
+  // real address rather than a stale one. Coordinates and the typed words both
+  // go on, matching what registration itself writes.
+  if (requestedMeter) {
+    await attachLukuLocation({
+      meterNumber: requestedMeter,
+      phone,
+      latitude: payload.location.latitude,
+      longitude: payload.location.longitude,
+    });
+    await syncLukuAddress({
+      meterNumber: requestedMeter,
+      phone,
+      wardKata: payload.ward_kata,
+      streetMtaa: payload.street_mtaa.length > 0 ? payload.street_mtaa : null,
+    });
+  }
+
+  if (isCommercial) {
+    await prisma.commercialProfile.update({
+      where: { userId },
+      data: {
+        wardKata: payload.ward_kata,
+        streetMtaa: payload.street_mtaa,
+        latitude: payload.location.latitude,
+        longitude: payload.location.longitude,
+        lukuMeter: requestedMeter,
+      },
+    });
+  } else {
+    // The guard above already refused an empty meter, so this is a meter number.
+    await prisma.residentProfile.update({
+      where: { userId },
+      data: {
+        wardKata: payload.ward_kata,
+        streetMtaa: payload.street_mtaa,
+        latitude: payload.location.latitude,
+        longitude: payload.location.longitude,
+        lukuMeter: requestedMeter as string,
+      },
+    });
+  }
 
   const updated = await findUserById(userId);
   if (!updated) {

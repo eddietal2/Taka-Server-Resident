@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { AppError, ok } from '../lib/http.js';
 import { getLukuLookupProvider } from '../lib/ntzs.js';
 import { readValidatedJson } from '../lib/validate.js';
-import { requireVerificationToken } from '../middleware/auth.js';
+import { requirePhoneOwner, requireVerificationToken } from '../middleware/auth.js';
 import { LUKU_UTILITY_CODE, lukuLocationSchema, lukuLookupSchema } from '../schemas/luku.js';
 import {
   attachLukuLocation,
@@ -62,7 +62,7 @@ function savedAddress(record: Awaited<ReturnType<typeof findLuku>>) {
  * step and any later sign-up for the same meter start from what is already on
  * file.
  */
-lukuRoutes.post('/luku/lookup', requireVerificationToken, async (c) => {
+lukuRoutes.post('/luku/lookup', requirePhoneOwner, async (c) => {
   const { phone, luku_meter } = await readValidatedJson(c, lukuLookupSchema);
   assertVerifiedPhone(c.get('verificationPhone'), phone);
 

@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 
 import { AppError } from '../lib/http.js';
 import { verifyAccessToken, verifyVerificationToken } from '../lib/jwt.js';
+import { findUserPhoneById } from '../services/registration.js';
 import type { AppEnv } from '../types.js';
 
 function readBearerToken(header: string | undefined): string | null {
@@ -62,6 +63,44 @@ export const requireUploadAuth = createMiddleware<AppEnv>(async (c, next) => {
   const userId = await verifyAccessToken(token);
   if (userId) {
     c.set('uploadOwner', { kind: 'user', userId });
+    await next();
+    return;
+  }
+
+  throw new AppError('Your verification has expired. Request a new code.', 401);
+});
+
+/**
+ * Gates a meter enquiry for either half of an account's life.
+ *
+ * Before sign-up completes the only proof available is the verification token
+ * from `otp/verify`. Afterwards the app holds an access token instead, and that
+ * short-lived token is long expired — yet a signed-in account still needs to be
+ * able to check a meter it is moving onto. Either way the asserted phone is left
+ * on `verificationPhone`, so the handlers below need no idea which was shown.
+ */
+export const requirePhoneOwner = createMiddleware<AppEnv>(async (c, next) => {
+  const token = readBearerToken(c.req.header('Authorization'));
+
+  if (!token) {
+    throw new AppError('Verify your phone number to continue.', 401);
+  }
+
+  const phone = await verifyVerificationToken(token);
+  if (phone) {
+    c.set('verificationPhone', phone);
+    await next();
+    return;
+  }
+
+  const userId = await verifyAccessToken(token);
+  if (userId) {
+    const accountPhone = await findUserPhoneById(userId);
+    if (!accountPhone) {
+      throw new AppError('Account not found.', 404);
+    }
+    c.set('verificationPhone', accountPhone);
+    c.set('authenticatedUserId', userId);
     await next();
     return;
   }

@@ -24,7 +24,7 @@ export type WasteTier = (typeof WASTE_TIERS)[number];
 /** Exported so editing a name later is held to the same rules as registering one. */
 export const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
 export const businessNameSchema = z.string().trim().min(2, 'Required.').max(120, 'Too long.');
-const localitySchema = z.string().trim().min(2, 'Required.').max(80, 'Too long.');
+export const localitySchema = z.string().trim().min(2, 'Required.').max(80, 'Too long.');
 /**
  * Street / mtaa. Optional for now: not everyone knows theirs, and the details
  * step no longer requires one, so an empty value has to validate.

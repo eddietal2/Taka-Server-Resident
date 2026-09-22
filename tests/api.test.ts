@@ -199,6 +199,59 @@ describe('users/me', () => {
   });
 });
 
+describe('users/me/site', () => {
+  const site = {
+    ward_kata: 'Ihumwa',
+    street_mtaa: 'Mlimani',
+    location: { latitude: -6.8, longitude: 39.2 },
+  };
+
+  it('rejects the read without an access token', async () => {
+    const res = await app.request('/api/v1/users/me');
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects the update without an access token', async () => {
+    const res = await postJson('/api/v1/users/me/site', site);
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects a ward that is too short before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson('/api/v1/users/me/site', { ...site, ward_kata: 'A' }, accessToken);
+
+    // The body is validated before the account is read, so this asserts the
+    // schema without needing a database.
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.ward_kata).toBeTruthy();
+  });
+
+  it('rejects a meter that is not 11 digits before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson('/api/v1/users/me/site', { ...site, luku_meter: '123' }, accessToken);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.luku_meter).toBeTruthy();
+  });
+
+  it('rejects a location outside the globe before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/site',
+      { ...site, location: { latitude: 120, longitude: 39.2 } },
+      accessToken
+    );
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.['location.latitude']).toBeTruthy();
+  });
+});
+
 describe('users/me/phone', () => {
   const NEW_PHONE = '+255700000000';
 
