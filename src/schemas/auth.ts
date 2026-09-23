@@ -25,6 +25,8 @@ export type WasteTier = (typeof WASTE_TIERS)[number];
 export const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
 export const businessNameSchema = z.string().trim().min(2, 'Required.').max(120, 'Too long.');
 export const localitySchema = z.string().trim().min(2, 'Required.').max(80, 'Too long.');
+/** Also exported, so editing a TIN later cannot accept one sign-up would refuse. */
+export const taxIdSchema = z.string().regex(TAX_ID_PATTERN, 'Use the 123-456-789 format.');
 /**
  * Street / mtaa. Optional for now: not everyone knows theirs, and the details
  * step no longer requires one, so an empty value has to validate.
@@ -71,7 +73,7 @@ export const commercialPayloadSchema = z.object({
    */
   luku_meter: z.string().regex(LUKU_METER_PATTERN, 'LUKU meters are 11 digits.').optional(),
   waste_tier: z.enum(WASTE_TIERS),
-  tax_id: z.string().regex(TAX_ID_PATTERN, 'Use the 123-456-789 format.'),
+  tax_id: taxIdSchema,
   business_logo: imageUrlSchema,
 });
 

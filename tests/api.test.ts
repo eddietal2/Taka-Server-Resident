@@ -197,6 +197,15 @@ describe('users/me', () => {
     const errorBody = (await res.json()) as { errors?: Record<string, string> };
     expect(errorBody.errors?.business_name).toBeTruthy();
   });
+
+  it('holds a TIN to the same format as registration', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { tax_id: '123456789' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.tax_id).toBeTruthy();
+  });
 });
 
 describe('users/me deletion', () => {

@@ -27,6 +27,8 @@ export type PublicUser = {
   first_name?: string;
   last_name?: string;
   business_name?: string;
+  /** Commercial only: the TIN the business is invoiced under, e.g. 100-234-567. */
+  tax_id?: string;
   /** Profile picture for residents and reporters, logo for commercial accounts. */
   picture_url?: string;
   /** Chosen app language. Absent until the account picks one. */
@@ -138,6 +140,7 @@ function toPublicUser(
 
   if (payload.intent === 'COMMERCIAL') {
     publicUser.business_name = payload.business_name;
+    publicUser.tax_id = payload.tax_id;
     publicUser.picture_url = payload.business_logo;
   }
 
@@ -174,7 +177,9 @@ type ProfileUser = {
   themePreference: string | null;
   resident: (AddressProfile & { profilePictureUrl: string }) | null;
   reporter: { profilePictureUrl: string } | null;
-  commercial: (AddressProfile & { businessName: string; businessLogoUrl: string }) | null;
+  commercial:
+    | (AddressProfile & { businessName: string; taxId: string; businessLogoUrl: string })
+    | null;
 };
 
 /**
@@ -195,6 +200,7 @@ function toPublicUserFromProfile(user: ProfileUser): PublicUser {
 
   if (user.intent === 'COMMERCIAL') {
     publicUser.business_name = user.commercial?.businessName ?? undefined;
+    publicUser.tax_id = user.commercial?.taxId ?? undefined;
     publicUser.picture_url = user.commercial?.businessLogoUrl ?? undefined;
   } else {
     publicUser.first_name = user.firstName ?? undefined;

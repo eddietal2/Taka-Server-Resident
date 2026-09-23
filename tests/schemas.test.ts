@@ -8,6 +8,7 @@ import {
 } from '../src/schemas/auth';
 import { otpRequestSchema, otpVerifySchema } from '../src/schemas/phone';
 import { presignRequestSchema } from '../src/schemas/uploads';
+import { updateUserSchema } from '../src/schemas/users';
 
 const residentPayload = {
   phone: '+255712345678',
@@ -122,6 +123,20 @@ describe('registerPayloadSchema', () => {
     expect(
       registerPayloadSchema.safeParse({ ...residentPayload, intent: 'UNKNOWN' }).success
     ).toBe(false);
+  });
+});
+
+describe('updateUserSchema', () => {
+  it('accepts a TIN in the format registration uses', () => {
+    expect(updateUserSchema.safeParse({ tax_id: '123-456-789' }).success).toBe(true);
+  });
+
+  it('rejects a TIN the sign-up form would not have accepted', () => {
+    expect(updateUserSchema.safeParse({ tax_id: '123456789' }).success).toBe(false);
+  });
+
+  it('still accepts a body that has nothing to do with a TIN', () => {
+    expect(updateUserSchema.safeParse({ language: 'sw' }).success).toBe(true);
   });
 });
 

@@ -14,9 +14,9 @@ export type UserUpdateOutcome = {
  *
  * Each field lands wherever the stored intent says it belongs, never where the
  * caller says: the image column differs between residents, reporters and
- * businesses, a business keeps its name on its profile while a person keeps
- * theirs on the user row, and language and appearance belong to the account
- * itself because they are not specific to any one type.
+ * businesses, a business keeps its name and its TIN on its profile while a
+ * person keeps theirs on the user row, and language and appearance belong to the
+ * account itself because they are not specific to any one type.
  *
  * The account is read twice — once to learn the intent, once to return the
  * updated record — because a single query would have to write a column it is
@@ -45,6 +45,11 @@ export async function updateUser(
       first_name: 'Use a first and last name for this account.',
     });
   }
+  if (!isCommercial && payload.tax_id) {
+    throw new AppError('This account is registered to a person.', 400, {
+      tax_id: 'Only a business account has a TIN.',
+    });
+  }
 
   const accountData: {
     language?: string;
@@ -68,6 +73,15 @@ export async function updateUser(
     await prisma.commercialProfile.update({
       where: { userId },
       data: { businessName: payload.business_name },
+    });
+  }
+
+  // `taxId` is unique on the profile, so a TIN another business already holds
+  // surfaces as Prisma P2002 and is mapped to a 409 by the error middleware.
+  if (isCommercial && payload.tax_id) {
+    await prisma.commercialProfile.update({
+      where: { userId },
+      data: { taxId: payload.tax_id },
     });
   }
 

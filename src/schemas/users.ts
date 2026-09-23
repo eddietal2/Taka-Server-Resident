@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-import { businessNameSchema, geoPointSchema, LUKU_METER_PATTERN, localitySchema, nameSchema } from './auth.js';
+import {
+  businessNameSchema,
+  geoPointSchema,
+  LUKU_METER_PATTERN,
+  localitySchema,
+  nameSchema,
+  taxIdSchema,
+} from './auth.js';
 import { phoneSchema } from './phone.js';
 
 /** Languages the app ships translations for. */
@@ -46,6 +53,13 @@ export const updateUserSchema = z.object({
   first_name: nameSchema.optional(),
   last_name: nameSchema.optional(),
   business_name: businessNameSchema.optional(),
+  /**
+   * The TIN a commercial account is invoiced under. Taken from the same schema as
+   * registration, so a number the sign-up form would have accepted is never
+   * refused here, and which accounts may change it is decided from the stored
+   * intent rather than from the body.
+   */
+  tax_id: taxIdSchema.optional(),
   picture_url: z
     .string()
     .trim()
