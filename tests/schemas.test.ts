@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  addIntentPayloadSchema,
   commercialPayloadSchema,
   registerPayloadSchema,
   reporterPayloadSchema,
@@ -126,6 +127,56 @@ describe('registerPayloadSchema', () => {
   });
 });
 
+describe('addIntentPayloadSchema', () => {
+  // The same profile registration sends, with the phone left out: the account is
+  // identified by its access token, never by the body.
+  const residentProfile = {
+    intent: 'RESIDENT' as const,
+    first_name: 'Amina',
+    last_name: 'Mwangi',
+    ward_kata: 'Kata',
+    street_mtaa: 'Mtaa',
+    luku_meter: '12345678901',
+    location: { latitude: -6.8, longitude: 39.2 },
+    unit_number: '',
+    profile_picture: 'https://cdn.example.com/a.jpg',
+  };
+
+  it('accepts the profile shapes a signed-in account attaches', () => {
+    expect(addIntentPayloadSchema.safeParse(residentProfile).success).toBe(true);
+    expect(
+      addIntentPayloadSchema.safeParse({
+        intent: 'REPORTER',
+        first_name: 'Juma',
+        last_name: 'Ali',
+        profile_picture: 'https://cdn.example.com/a.jpg',
+      }).success
+    ).toBe(true);
+  });
+
+  it('drops the phone number, which the access token owns', () => {
+    const result = addIntentPayloadSchema.safeParse(residentPayload);
+    expect(result.success).toBe(true);
+    if (result.success) expect('phone' in result.data).toBe(false);
+  });
+
+  it('still holds the meter to the 11-digit rule', () => {
+    expect(
+      addIntentPayloadSchema.safeParse({ ...residentProfile, luku_meter: '123' }).success
+    ).toBe(false);
+  });
+
+  it('rejects an intent the API cannot attach', () => {
+    expect(
+      addIntentPayloadSchema.safeParse({ ...residentProfile, intent: 'UNKNOWN' }).success
+    ).toBe(false);
+    // Commercial joins this union only when the app offers a business role.
+    expect(
+      addIntentPayloadSchema.safeParse({ ...commercialPayload }).success
+    ).toBe(false);
+  });
+});
+
 describe('updateUserSchema', () => {
   it('accepts a TIN in the format registration uses', () => {
     expect(updateUserSchema.safeParse({ tax_id: '123-456-789' }).success).toBe(true);
@@ -137,6 +188,14 @@ describe('updateUserSchema', () => {
 
   it('still accepts a body that has nothing to do with a TIN', () => {
     expect(updateUserSchema.safeParse({ language: 'sw' }).success).toBe(true);
+  });
+
+  it('accepts a role the account could switch to', () => {
+    expect(updateUserSchema.safeParse({ intent: 'REPORTER' }).success).toBe(true);
+  });
+
+  it('rejects a role the API does not store', () => {
+    expect(updateUserSchema.safeParse({ intent: 'UNKNOWN' }).success).toBe(false);
   });
 });
 

@@ -6,8 +6,9 @@ import { verifyVerificationToken } from '../lib/jwt.js';
 import { sendAccountMessage } from '../lib/otp.js';
 import { readValidatedJson } from '../lib/validate.js';
 import { requireAccessToken } from '../middleware/auth.js';
+import { addIntentPayloadSchema } from '../schemas/auth.js';
 import { changePhoneSchema, updateSiteSchema, updateUserSchema } from '../schemas/users.js';
-import { findUserById } from '../services/registration.js';
+import { addIntentToUser, findUserById } from '../services/registration.js';
 import { changePhone, deleteAccount, updateSite, updateUser } from '../services/users.js';
 import type { AppEnv } from '../types.js';
 
@@ -49,6 +50,22 @@ usersRoutes.patch('/users/me', requireAccessToken, async (c) => {
   const account = await updateUser(c.get('authenticatedUserId'), payload);
 
   return ok(c, { status: account.status, user: account.user });
+});
+
+/**
+ * Attaches a second role to the signed-in account.
+ *
+ * The account is identified by its access token, so the payload carries only the
+ * new role's profile — never a phone number. The role becomes the active one and
+ * the whole updated account is returned, so the app can store what the server
+ * now holds.
+ */
+usersRoutes.post('/users/me/intents', requireAccessToken, async (c) => {
+  const payload = await readValidatedJson(c, addIntentPayloadSchema);
+
+  const account = await addIntentToUser(c.get('authenticatedUserId'), payload);
+
+  return ok(c, { status: account.status, user: account.user }, 201);
 });
 
 /**

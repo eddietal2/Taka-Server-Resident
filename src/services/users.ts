@@ -12,14 +12,18 @@ export type UserUpdateOutcome = {
 /**
  * Applies a partial update to the signed-in account.
  *
- * Each field lands wherever the stored intent says it belongs, never where the
- * caller says: the image column differs between residents, reporters and
- * businesses, a business keeps its name and its TIN on its profile while a
- * person keeps theirs on the user row, and language and appearance belong to the
- * account itself because they are not specific to any one type.
+ * Each field lands wherever the active intent says it belongs: the image column
+ * differs between residents, reporters and businesses, a business keeps its name
+ * and its TIN on its profile while a person keeps theirs on the user row, and
+ * language and appearance belong to the account itself because they are not
+ * specific to any one type.
  *
- * The account is read twice — once to learn the intent, once to return the
- * updated record — because a single query would have to write a column it is
+ * `intent` is the one field the caller chooses, and only among the roles the
+ * account already holds — it selects which profile the rest of the update lands
+ * on, so it is written before anything else and the two cannot disagree.
+ *
+ * The account is read twice — once to learn the current intent, once to return
+ * the updated record — because a single query would have to write a column it is
  * still deciding.
  */
 export async function updateUser(
@@ -31,7 +35,21 @@ export async function updateUser(
     throw new AppError('Account not found.', 404);
   }
 
-  const isCommercial = account.user.intent === 'COMMERCIAL';
+  // Switching role is a change of view within one account, not a registration:
+  // only a role the account already holds can be selected, so the profile behind
+  // it exists. Written first, so every field below lands on the profile that
+  // will be active when the caller sees the response.
+  if (payload.intent && payload.intent !== account.user.intent) {
+    if (!account.user.roles.includes(payload.intent)) {
+      throw new AppError('This account does not have that role.', 400, {
+        intent: 'Add this role before switching to it.',
+      });
+    }
+    await prisma.user.update({ where: { id: userId }, data: { intent: payload.intent } });
+  }
+
+  const activeIntent = payload.intent ?? account.user.intent;
+  const isCommercial = activeIntent === 'COMMERCIAL';
 
   // Refused rather than dropped: silently ignoring a name that does not fit the
   // account type would answer 200 having changed nothing, which reads as saved.
@@ -92,7 +110,7 @@ export async function updateUser(
         where: { userId },
         data: { businessLogoUrl: pictureUrl },
       });
-    } else if (account.user.intent === 'RESIDENT') {
+    } else if (activeIntent === 'RESIDENT') {
       await prisma.residentProfile.update({
         where: { userId },
         data: { profilePictureUrl: pictureUrl },

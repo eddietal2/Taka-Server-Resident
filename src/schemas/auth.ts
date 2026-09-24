@@ -21,6 +21,13 @@ export const WASTE_TIERS = [
 ] as const;
 export type WasteTier = (typeof WASTE_TIERS)[number];
 
+/**
+ * Account roles the API can store. Mirrors the Prisma `Intent` enum, which
+ * cannot be imported as a runtime value, and the client's `USER_INTENTS`.
+ */
+export const USER_INTENTS = ['RESIDENT', 'REPORTER', 'COMMERCIAL'] as const;
+export type UserIntent = (typeof USER_INTENTS)[number];
+
 /** Exported so editing a name later is held to the same rules as registering one. */
 export const nameSchema = z.string().trim().min(2, 'Too short.').max(60, 'Too long.');
 export const businessNameSchema = z.string().trim().min(2, 'Required.').max(120, 'Too long.');
@@ -87,3 +94,24 @@ export type ResidentPayload = z.infer<typeof residentPayloadSchema>;
 export type ReporterPayload = z.infer<typeof reporterPayloadSchema>;
 export type CommercialPayload = z.infer<typeof commercialPayloadSchema>;
 export type RegisterPayload = z.infer<typeof registerPayloadSchema>;
+
+/**
+ * The body of `POST /users/me/intents`, used to attach a second role to an
+ * account that is already signed in.
+ *
+ * The same profile fields registration collects, minus `phone`: the account is
+ * identified by its access token, so the number is never taken from the body.
+ * `intent` stays the discriminator. Commercial joins this union when the app
+ * offers a business role alongside a personal one.
+ */
+export const residentProfileSchema = residentPayloadSchema.omit({ phone: true });
+export const reporterProfileSchema = reporterPayloadSchema.omit({ phone: true });
+
+export const addIntentPayloadSchema = z.discriminatedUnion('intent', [
+  residentProfileSchema,
+  reporterProfileSchema,
+]);
+
+export type ResidentProfilePayload = z.infer<typeof residentProfileSchema>;
+export type ReporterProfilePayload = z.infer<typeof reporterProfileSchema>;
+export type AddIntentPayload = z.infer<typeof addIntentPayloadSchema>;

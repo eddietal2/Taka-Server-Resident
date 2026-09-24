@@ -7,6 +7,7 @@ import {
   localitySchema,
   nameSchema,
   taxIdSchema,
+  USER_INTENTS,
 } from './auth.js';
 import { phoneSchema } from './phone.js';
 
@@ -68,6 +69,13 @@ export const updateUserSchema = z.object({
     .optional(),
   language: z.enum(USER_LANGUAGES).optional(),
   theme_preference: z.enum(THEME_PREFERENCES).optional(),
+  /**
+   * The role the account is used in. Only a role the account already holds may
+   * be selected — switching is a change of view, not a registration — so the
+   * service refuses any other. It is written before the rest of the update, so
+   * the fields below land on the profile that will be active.
+   */
+  intent: z.enum(USER_INTENTS).optional(),
 });
 
 export type UpdateUserPayload = z.infer<typeof updateUserSchema>;

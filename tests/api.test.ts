@@ -206,6 +206,78 @@ describe('users/me', () => {
     const errorBody = (await res.json()) as { errors?: Record<string, string> };
     expect(errorBody.errors?.tax_id).toBeTruthy();
   });
+
+  it('rejects a role the API does not store before reading the account', async () => {
+    const token = await signAccessToken(USER_ID);
+    const res = await patchJson('/api/v1/users/me', { intent: 'UNKNOWN' }, token);
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.intent).toBeTruthy();
+  });
+});
+
+describe('users/me/intents', () => {
+  it('rejects without an access token', async () => {
+    const res = await postJson('/api/v1/users/me/intents', {
+      intent: 'REPORTER',
+      first_name: 'Juma',
+      last_name: 'Ali',
+      profile_picture: 'https://cdn.example.com/a.jpg',
+    });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ message: 'Sign in to continue.' });
+  });
+
+  it('rejects a reporter profile with no picture before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/intents',
+      { intent: 'REPORTER', first_name: 'Juma', last_name: 'Ali' },
+      accessToken
+    );
+
+    // The body is validated before the account is read, so this asserts the
+    // schema without needing a database.
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.profile_picture).toBeTruthy();
+  });
+
+  it('rejects a resident profile whose meter is malformed before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/intents',
+      {
+        intent: 'RESIDENT',
+        first_name: 'Amina',
+        last_name: 'Mwangi',
+        ward_kata: 'Kata',
+        street_mtaa: 'Mtaa',
+        luku_meter: '123',
+        location: { latitude: -6.8, longitude: 39.2 },
+        unit_number: '',
+        profile_picture: 'https://cdn.example.com/a.jpg',
+      },
+      accessToken
+    );
+
+    expect(res.status).toBe(400);
+    const errorBody = (await res.json()) as { errors?: Record<string, string> };
+    expect(errorBody.errors?.luku_meter).toBeTruthy();
+  });
+
+  it('rejects an intent the API cannot attach before reading the account', async () => {
+    const accessToken = await signAccessToken(USER_ID);
+    const res = await postJson(
+      '/api/v1/users/me/intents',
+      { intent: 'UNKNOWN', profile_picture: 'https://cdn.example.com/a.jpg' },
+      accessToken
+    );
+
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('users/me deletion', () => {

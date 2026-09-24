@@ -3,6 +3,7 @@ import { AppError } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import type {
+  AddIntentPayload,
   CommercialPayload,
   RegisterPayload,
   ReporterPayload,
@@ -22,8 +23,11 @@ export type UserStatusValue = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 export type PublicUser = {
   id: string;
   phone: string;
+  /** The role the account is currently used in. */
   intent: UserIntent;
   status: UserStatusValue;
+  /** Every role the account holds; always includes the active `intent`. */
+  roles: UserIntent[];
   first_name?: string;
   last_name?: string;
   business_name?: string;
@@ -55,6 +59,27 @@ function trimmedOrNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/**
+ * The columns a resident profile is written with. Shared by registration and by
+ * attaching the role to an existing account, so both write the same shape — and
+ * deliberately phone-less, because the account owns the number either way.
+ */
+function residentProfileData(payload: Omit<ResidentPayload, 'phone'>) {
+  return {
+    wardKata: payload.ward_kata,
+    streetMtaa: payload.street_mtaa,
+    lukuMeter: payload.luku_meter,
+    unitNumber: trimmedOrNull(payload.unit_number),
+    latitude: payload.location.latitude,
+    longitude: payload.location.longitude,
+    profilePictureUrl: payload.profile_picture,
+  };
+}
+
+function reporterProfileData(payload: Omit<ReporterPayload, 'phone'>) {
+  return { profilePictureUrl: payload.profile_picture };
+}
+
 function createResident(payload: ResidentPayload, status: UserStatusValue) {
   return prisma.user.create({
     data: {
@@ -63,17 +88,7 @@ function createResident(payload: ResidentPayload, status: UserStatusValue) {
       status,
       firstName: payload.first_name,
       lastName: payload.last_name,
-      resident: {
-        create: {
-          wardKata: payload.ward_kata,
-          streetMtaa: payload.street_mtaa,
-          lukuMeter: payload.luku_meter,
-          unitNumber: trimmedOrNull(payload.unit_number),
-          latitude: payload.location.latitude,
-          longitude: payload.location.longitude,
-          profilePictureUrl: payload.profile_picture,
-        },
-      },
+      resident: { create: residentProfileData(payload) },
     },
   });
 }
@@ -86,11 +101,7 @@ function createReporter(payload: ReporterPayload, status: UserStatusValue) {
       status,
       firstName: payload.first_name,
       lastName: payload.last_name,
-      reporter: {
-        create: {
-          profilePictureUrl: payload.profile_picture,
-        },
-      },
+      reporter: { create: reporterProfileData(payload) },
     },
   });
 }
@@ -130,6 +141,7 @@ function toPublicUser(
     phone: user.phone,
     intent: payload.intent,
     status,
+    roles: [payload.intent],
   };
 
   if (payload.intent === 'RESIDENT' || payload.intent === 'REPORTER') {
@@ -191,11 +203,21 @@ type ProfileUser = {
  * `picture_url`, so the app has one field to render whatever the account type.
  */
 function toPublicUserFromProfile(user: ProfileUser): PublicUser {
+  // The roles are read from the profile rows rather than a stored list, so a
+  // profile and the roles that name it can never drift apart. The active intent
+  // is added back if it somehow has no profile, so it is always held.
+  const roles: UserIntent[] = [];
+  if (user.resident) roles.push('RESIDENT');
+  if (user.reporter) roles.push('REPORTER');
+  if (user.commercial) roles.push('COMMERCIAL');
+  if (!roles.includes(user.intent)) roles.push(user.intent);
+
   const publicUser: PublicUser = {
     id: user.id,
     phone: user.phone,
     intent: user.intent,
     status: user.status,
+    roles,
   };
 
   if (user.intent === 'COMMERCIAL') {
@@ -376,4 +398,75 @@ export async function createRegistration(payload: RegisterPayload): Promise<Regi
     );
   }
   return { user: toPublicUser(user, payload, status), status };
+}
+
+/**
+ * Attaches a second role's profile to an account that already exists.
+ *
+ * The account is identified by its access token, so the number is never taken
+ * from the payload and the `User` row — its phone, its name and its preferences
+ * — is left untouched. Only the missing profile row is created, and the new role
+ * is made active so the caller lands in the flow it just completed. The response
+ * carries the whole account, so the app can store what the server now holds.
+ */
+export async function addIntentToUser(
+  userId: string,
+  payload: AddIntentPayload
+): Promise<RegistrationOutcome> {
+  const account = await findUserById(userId);
+  if (!account) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  if (account.user.roles.includes(payload.intent)) {
+    throw new AppError('This account already has that role.', 409, {
+      intent: 'This account already has that role.',
+    });
+  }
+
+  if (payload.intent === 'RESIDENT') {
+    // The same cross-table meter guard registration applies: a meter held by any
+    // other account cannot be claimed here. A claim by this account cannot exist
+    // because it would already own the resident role, which was refused above.
+    const holder = await findMeterClaim(payload.luku_meter);
+    if (holder && holder !== account.user.phone) {
+      throw new AppError('This meter is already registered to another account.', 409, {
+        luku_meter: 'Already registered to another account.',
+      });
+    }
+
+    await prisma.residentProfile.create({
+      data: { userId, ...residentProfileData(payload) },
+    });
+    await syncMeterAddress(
+      payload.luku_meter,
+      account.user.phone,
+      payload.ward_kata,
+      payload.street_mtaa
+    );
+  } else {
+    await prisma.reporterProfile.create({
+      data: { userId, ...reporterProfileData(payload) },
+    });
+  }
+
+  // The role becomes active, and the name travels with it: it lives on the
+  // account rather than on either profile, and it is the same person either way,
+  // so the copy the wizard collected updates it instead of being discarded.
+  // Both attachable roles carry a name; a business role later would not.
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      intent: payload.intent,
+      firstName: payload.first_name,
+      lastName: payload.last_name,
+    },
+  });
+
+  const updated = await findUserById(userId);
+  if (!updated) {
+    throw new AppError('Account not found.', 404);
+  }
+
+  return updated;
 }
